@@ -1,0 +1,185 @@
+//
+// Created by jbs on 18. 6. 29.
+//
+
+
+#include "utils.h"
+
+Point3f sph2R3(Point3f source,float r,float azim,float elev){
+
+    float X= source.x+r*cos(elev)*cos(azim);
+    float Y= source.y+r*cos(elev)*sin(azim);
+    float Z= source.z+r*sin(elev);
+    return Point3f(X,Y,Z);
+};
+
+
+MatrixXd SEDT(MatrixXd binaryMatrix){
+
+    int N_elev=binaryMatrix.rows();
+    int N_azim=binaryMatrix.cols();
+
+    Mat bw_cast(N_azim,N_elev,CV_64F,binaryMatrix.data());
+    bw_cast.convertTo(bw_cast,CV_8UC(1));
+    transpose(bw_cast,bw_cast);
+
+    // calculate SEDT
+    cv::Mat dist,dist1,dist2;
+    // in the cv pack 1= white... 0=black... fuck!
+    distanceTransform(1-bw_cast, dist1, CV_DIST_L2, 0);
+    vector<Vec4i> hierarchy;
+    vector<vector<Point> > contours;
+    findContours(bw_cast,contours,hierarchy,CV_RETR_EXTERNAL,CV_CHAIN_APPROX_NONE,Point(0, 0));
+    for( int i = 0; i< contours.size(); i++ ) // for each cluster
+        for (int j=0;j<contours[i].size();j++)
+            bw_cast.at<uchar>(contours[i][j].y,contours[i][j].x)=0;
+
+    distanceTransform(bw_cast, dist2, CV_DIST_L2, 0);
+    dist=dist1-dist2;
+
+    MatrixXd mat;
+    cv2eigen(dist,mat);
+
+    return mat;
+}
+
+IDX maxElem(const MatrixXd& mat){
+    // this function find max elements in matrix and return the (row,col) index
+    int num_row=mat.rows();
+    int num_col=mat.cols();
+    IDX max_index;
+    double max_val=numeric_limits<double >::min();
+    int max_row=0,max_col=0;
+
+    for(long i=0;i<num_row;i++)
+        for(long j=0;j<num_col;j++)
+            if (mat.coeff(i,j)>max_val) {
+                max_row = i, max_col = j;
+                max_val=mat.coeff(i,j);
+            }
+
+    max_index[0]=max_row;
+    max_index[1]=max_col;
+
+    return max_index;
+}
+
+
+// this function finds numExt many extrema(local max) in matrix
+vector<IDX> localMaxima(const MatrixXd& mat,int numExt,int range){
+
+    vector<IDX> local_extrema;
+
+
+    MatrixXd temp_mat=mat.replicate(1,1);
+    int num_row=mat.rows();
+    int num_col=mat.cols();
+
+    for(int k = 0; k<numExt ; k++) {
+
+        IDX max_idx = maxElem(temp_mat);
+        // save this extrema
+        local_extrema.push_back(max_idx);
+
+        // we make element in the window zeros
+        int row_min=std::max(max_idx[0]-range,0);
+        int row_max=std::min(max_idx[0]+range,num_row-1);
+
+        int col_min=std::max(max_idx[1]-range,0);
+        int col_max=std::min(max_idx[1]+range,num_col-1);
+
+        //iterate through the window and set zeros
+        for (int r=row_min;r<=row_max;r++)
+            for(int c=col_min;c<=col_max;c++)
+                temp_mat.coeffRef(r,c)=0;
+    }
+
+    return local_extrema;
+}
+
+GraphPath Dijkstra(Graph g,Vertex v0,Vertex vf){
+
+    // Create things for Dijkstra
+    std::vector<Vertex> predecessors(boost::num_vertices(g)); // To store parents
+    std::vector<Weight> distances(boost::num_vertices(g)); // To store distances
+
+    IndexMap indexMap = boost::get(boost::vertex_index, g);
+    PredecessorMap predecessorMap(&predecessors[0], indexMap);
+    DistanceMap distanceMap(&distances[0], indexMap);
+
+    // Compute shortest paths from v0 to all vertices, and store the output in predecessors and distances
+    // boost::dijkstra_shortest_paths(g, v0, boost::predecessor_map(predecessorMap).distance_map(distanceMap));
+    // This is exactly the same as the above line - it is the idea of "named parameters" - you can pass the
+    // prdecessor map and the distance map in any order.
+    boost::dijkstra_shortest_paths(g, v0, boost::distance_map(distanceMap).predecessor_map(predecessorMap));
+
+    // Output results
+//    std::cout << "distances and parents:" << std::endl;
+    NameMap nameMap = boost::get(boost::vertex_name, g);
+//
+//    BGL_FORALL_VERTICES(v, g, Graph)
+//        {
+//            std::cout << "distance(" << nameMap[v0] << ", " << nameMap[v] << ") = " << distanceMap[v] << ", ";
+//            std::cout << "predecessor(" << nameMap[v] << ") = " << nameMap[predecessorMap[v]] << std::endl;
+//        }
+//
+//    // Extract a shortest path
+//    std::cout << std::endl;
+
+    typedef std::vector<Graph::edge_descriptor> PathType;
+
+    PathType path;
+    Vertex v = vf; // We want to start at the destination and work our way back to the source
+    for(Vertex u = predecessorMap[v]; // Start by setting 'u' to the destintaion node's predecessor
+        u != v; // Keep tracking the path until we get to the source
+        v = u, u = predecessorMap[v]) // Set the current vertex to the current predecessor, and the predecessor to one level up
+    {
+        std::pair<Graph::edge_descriptor, bool> edgePair = boost::edge(u, v, g);
+        Graph::edge_descriptor edge = edgePair.first;
+
+        path.push_back( edge );
+    }
+
+    // Write shortest path
+//    std::cout << "Shortest path from v0 to v3:" << std::endl;
+    float totalDistance = 0;
+
+    GraphPath vertex_path1;
+    GraphPath vertex_path2;
+    for(PathType::reverse_iterator pathIterator = path.rbegin(); pathIterator != path.rend(); ++pathIterator)
+    {
+
+        vertex_path1.push_back(nameMap[boost::source(*pathIterator, g)]);
+        vertex_path2.push_back(nameMap[boost::target(*pathIterator, g)]);
+
+//        std::cout << nameMap[boost::source(*pathIterator, g)] << " -> " << nameMap[boost::target(*pathIterator, g)]
+//                  << " = " << boost::get( boost::edge_weight, g, *pathIterator ) << std::endl;
+    }
+
+    vertex_path1.push_back(vertex_path2.back());
+    return vertex_path1;
+}
+
+
+void mat_normalize(MatrixXd& mat){
+    double max_value=mat.maxCoeff();
+
+    int num_row=mat.rows();
+    int num_col=mat.cols();
+
+    for(long i=0;i<num_row;i++)
+        for(long j=0;j<num_col;j++)
+            mat(i,j)/=max_value;
+
+}
+
+
+
+
+
+
+
+
+
+
+
