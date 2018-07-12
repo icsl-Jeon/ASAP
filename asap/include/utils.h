@@ -29,10 +29,9 @@
 #include <trajectory_msgs/MultiDOFJointTrajectory.h>
 #include <tf/transform_datatypes.h>
 #include <visualization_msgs/Marker.h>
+#include <visualization_msgs/MarkerArray.h>
 #include <kiro_gui_msgs/PositionArray.h>
 #include <asap/SolvePath.h>
-
-
 
 
 // OPENCV
@@ -204,5 +203,5 @@ vector<IDX> localMaxima(const MatrixXd&,int,int );
 // finding shortest path using Dijkstra's path alogrithm
 GraphPath Dijkstra(Graph ,Vertex ,Vertex);
 void mat_normalize(MatrixXd&); // matrix normalization with maximum value
-
+vector<IDX> equal_dist_idx_set(int,int,int); // equal distribution when no cast is hit by obstacles
 #endif //ASAP_UTILS_H

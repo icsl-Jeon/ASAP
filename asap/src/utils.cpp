@@ -23,6 +23,15 @@ MatrixXd SEDT(MatrixXd binaryMatrix){
     bw_cast.convertTo(bw_cast,CV_8UC(1));
     transpose(bw_cast,bw_cast);
 
+	ROS_INFO("cols of bw_cast: %d",bw_cast.cols);
+
+    Mat concat_bw_cast;
+
+    hconcat(bw_cast,bw_cast,concat_bw_cast);
+    hconcat(bw_cast,concat_bw_cast,bw_cast);
+
+	ROS_INFO("cols of merged bw_cast: %d",bw_cast.cols);
+
     // calculate SEDT
     cv::Mat dist,dist1,dist2;
     // in the cv pack 1= white... 0=black... fuck!
@@ -37,8 +46,10 @@ MatrixXd SEDT(MatrixXd binaryMatrix){
     distanceTransform(bw_cast, dist2, CV_DIST_L2, 0);
     dist=dist1-dist2;
 
+    cv::Mat sliced_dist=dist.colRange(N_azim+1,2*N_azim);
+
     MatrixXd mat;
-    cv2eigen(dist,mat);
+    cv2eigen(sliced_dist,mat);
 
     return mat;
 }
@@ -68,33 +79,69 @@ IDX maxElem(const MatrixXd& mat){
 // this function finds numExt many extrema(local max) in matrix
 vector<IDX> localMaxima(const MatrixXd& mat,int numExt,int range){
 
-    vector<IDX> local_extrema;
+    if (!mat.isZero(0)) {
+        vector<IDX> local_extrema;
 
 
-    MatrixXd temp_mat=mat.replicate(1,1);
-    int num_row=mat.rows();
-    int num_col=mat.cols();
+        MatrixXd temp_mat = mat.replicate(1, 1);
+        int num_row = mat.rows();
+        int num_col = mat.cols();
 
-    for(int k = 0; k<numExt ; k++) {
+        for (int k = 0; k < numExt; k++) {
 
-        IDX max_idx = maxElem(temp_mat);
-        // save this extrema
-        local_extrema.push_back(max_idx);
+            IDX max_idx = maxElem(temp_mat);
+            // save this extrema
+            local_extrema.push_back(max_idx);
 
-        // we make element in the window zeros
-        int row_min=std::max(max_idx[0]-range,0);
-        int row_max=std::min(max_idx[0]+range,num_row-1);
+            // we make element in the window zeros
+            int row_min = std::max(max_idx[0] - range, 0);
+            int row_max = std::min(max_idx[0] + range, num_row - 1);
 
-        int col_min=std::max(max_idx[1]-range,0);
-        int col_max=std::min(max_idx[1]+range,num_col-1);
+            int col_min = std::max(max_idx[1] - range, 0);
+            int col_max = std::min(max_idx[1] + range, num_col - 1);
 
-        //iterate through the window and set zeros
-        for (int r=row_min;r<=row_max;r++)
-            for(int c=col_min;c<=col_max;c++)
-                temp_mat.coeffRef(r,c)=0;
+            //iterate through the window and set zeros
+            for (int r = row_min; r <= row_max; r++)
+                for (int c = col_min; c <= col_max; c++)
+                    temp_mat.coeffRef(r, c) = 0;
+        }
+
+        return local_extrema;
     }
+    else // if all ray wasn't hit
+        return equal_dist_idx_set(mat.rows(),mat.cols(),numExt);
 
-    return local_extrema;
+}
+
+vector<IDX> equal_dist_idx_set(int row,int col,int N_extrema){
+
+    int y_dist=ceil(sqrt(float(row)/float(col)*N_extrema));
+    int x_dist=ceil(sqrt(float(row)/float(col)*N_extrema));
+
+    VectorXf azim_vec,elev_vec;
+
+    azim_vec.setLinSpaced(x_dist+2,0,col-1);
+    elev_vec.setLinSpaced(y_dist+2,0,row-1);
+
+    VectorXi azim_veci(x_dist),elev_veci(y_dist);
+
+    for(int i=1;i<=azim_vec.rows()-2;i++)
+        azim_veci.coeffRef(i-1)=azim_vec.coeff(i);
+
+    for(int i=1;i<=elev_vec.rows()-2;i++)
+        elev_veci.coeffRef(i-1)=elev_vec.coeff(i);
+
+    vector<IDX> idx_set;
+
+    for(int r=0;r<y_dist;r++)
+        for(int c=0;c<x_dist;c++) {
+            IDX idx;
+            idx(0)=elev_veci.coeff(r);
+            idx(1)=azim_veci.coeff(c);
+            idx_set.push_back(idx);
+        }
+
+    return idx_set;
 }
 
 GraphPath Dijkstra(Graph g,Vertex v0,Vertex vf){
@@ -140,6 +187,10 @@ GraphPath Dijkstra(Graph g,Vertex v0,Vertex vf){
         path.push_back( edge );
     }
 
+
+
+
+
     // Write shortest path
 //    std::cout << "Shortest path from v0 to v3:" << std::endl;
     float totalDistance = 0;
@@ -149,6 +200,7 @@ GraphPath Dijkstra(Graph g,Vertex v0,Vertex vf){
     for(PathType::reverse_iterator pathIterator = path.rbegin(); pathIterator != path.rend(); ++pathIterator)
     {
 
+        ROS_INFO("path insertion");
         vertex_path1.push_back(nameMap[boost::source(*pathIterator, g)]);
         vertex_path2.push_back(nameMap[boost::target(*pathIterator, g)]);
 

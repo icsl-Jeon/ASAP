@@ -34,6 +34,8 @@ private:
     Graph g;
     // dictionary for vertex descriptor
     DescriptorMap descriptor_map;
+    // color map for plotting the candidate node
+    cv::Mat bgr[3];
 
 
 
@@ -62,6 +64,11 @@ public:
     ros::Publisher candidNodes_marker_pub; // points of local maximum in visibility matrix
     ros::Publisher pnts_pub; // points (clicked points)
     ros::Publisher path_pub; // view path
+    ros::Publisher node_pub; // node marker publisher
+    ros::Publisher edge_pub; // edge arrow publisher
+
+
+
 
     ros::ServiceServer solve_server; // server for solving view path
 
@@ -69,12 +76,19 @@ public:
     std::string world_frame_id; // maybe world
 
     // rviz
+
     visualization_msgs::Marker marker; // marker for candidate nodes
     visualization_msgs::Marker pnt_marker; // marker for pnts
+    visualization_msgs::Marker node_marker; // marker for nodes
+    visualization_msgs::Marker edge_marker; // marker for edges
+    visualization_msgs::MarkerArray arrow_array; // array of arrow
+	int edge_id;
+
+	
 
 
-    /**
-     *  FUNCTIONS
+
+    /***  FUNCTIONS
      */
 
     // publish
