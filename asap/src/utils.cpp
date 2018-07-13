@@ -193,26 +193,27 @@ GraphPath Dijkstra(Graph g,Vertex v0,Vertex vf){
         ROS_INFO("path exist");
     // Write shortest path
 //    std::cout << "Shortest path from v0 to v3:" << std::endl;
-    float totalDistance = 0;
+        float totalDistance = 0;
 
-    GraphPath vertex_path1;
-    GraphPath vertex_path2;
-    for(PathType::reverse_iterator pathIterator = path.rbegin(); pathIterator != path.rend(); ++pathIterator)
-    {
+        GraphPath vertex_path1;
+        GraphPath vertex_path2;
+        for(PathType::reverse_iterator pathIterator = path.rbegin(); pathIterator != path.rend(); ++pathIterator)
+        {
 
-        ROS_INFO("path insertion");
-        vertex_path1.push_back(nameMap[boost::source(*pathIterator, g)]);
-        vertex_path2.push_back(nameMap[boost::target(*pathIterator, g)]);
+            ROS_INFO("path insertion");
+            vertex_path1.push_back(nameMap[boost::source(*pathIterator, g)]);
+            vertex_path2.push_back(nameMap[boost::target(*pathIterator, g)]);
 
-//        std::cout << nameMap[boost::source(*pathIterator, g)] << " -> " << nameMap[boost::target(*pathIterator, g)]
-//                  << " = " << boost::get( boost::edge_weight, g, *pathIterator ) << std::endl;
+    //        std::cout << nameMap[boost::source(*pathIterator, g)] << " -> " << nameMap[boost::target(*pathIterator, g)]
+    //                  << " = " << boost::get( boost::edge_weight, g, *pathIterator ) << std::endl;
+        }
+
+        vertex_path1.push_back(vertex_path2.back());
+        return vertex_path1;
     }
-
-    vertex_path1.push_back(vertex_path2.back());
-    return vertex_path1;}
     else{
         ROS_WARN_ONCE("path does not exist");
-    return GraphPath();
+        return GraphPath();
     }
 }
 
