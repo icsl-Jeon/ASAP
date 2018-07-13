@@ -90,9 +90,9 @@ ASAP::ASAP(Params params):nh("~"){
     edge_marker.pose.orientation.w = 1.0;
     edge_marker.id = edge_id;
     edge_marker.type = visualization_msgs::Marker::ARROW;
-    edge_marker.scale.x = 0.03;
-    edge_marker.scale.y = 0.05;
-    edge_marker.scale.z = 0.05;
+    edge_marker.scale.x = 0.01;
+    edge_marker.scale.y = 0.02;
+    edge_marker.scale.z = 0.02;
     edge_marker.color.b = 0.8;
     edge_marker.color.g = 0.8;
     edge_marker.color.r = 0;
@@ -391,8 +391,11 @@ void ASAP::solve_view_path() {
     GraphPath graphPath=Dijkstra(g,descriptor_map["x0"],descriptor_map["xf"]);
     this->view_path=nav_msgs::Path();
 
+    std::cout<<"solved path received"<<std::endl;
     for(auto it = graphPath.begin(),end=graphPath.end();it != end;it++){
         VertexName id=*it;
+
+        std::cout<<"this id:"<<id<<" ";
 
         if (id == "x0"){
             geometry_msgs::PoseStamped poseStamped;
@@ -408,6 +411,8 @@ void ASAP::solve_view_path() {
             view_path.poses.push_back(poseStamped);
         }
     }
+    std::cout<<std::endl;
+
 }
 
 
@@ -512,11 +517,8 @@ bool ASAP::solve_callback(asap::SolvePath::Request& req,asap::SolvePath::Respons
     std::cout << "number of node markers: "<<node_marker.points.size()<<std::endl;
 
 
-//
-//
-//
-//    solve_view_path();
-//    ROS_INFO("Dijkstra solved");
+    solve_view_path();
+    ROS_INFO("Dijkstra solved");
 
     return true;
 }

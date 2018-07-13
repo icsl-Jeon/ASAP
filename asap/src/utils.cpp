@@ -188,9 +188,9 @@ GraphPath Dijkstra(Graph g,Vertex v0,Vertex vf){
     }
 
 
-
-
-
+    if (path.size())
+    {
+        ROS_INFO("path exist");
     // Write shortest path
 //    std::cout << "Shortest path from v0 to v3:" << std::endl;
     float totalDistance = 0;
@@ -209,7 +209,11 @@ GraphPath Dijkstra(Graph g,Vertex v0,Vertex vf){
     }
 
     vertex_path1.push_back(vertex_path2.back());
-    return vertex_path1;
+    return vertex_path1;}
+    else{
+        ROS_WARN_ONCE("path does not exist");
+    return GraphPath();
+    }
 }
 
 

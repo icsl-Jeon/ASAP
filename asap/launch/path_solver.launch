@@ -24,7 +24,7 @@
 	<param name="local_range" value="1" type="int"/>
 	<param name="N_extrema" value="8" type="int"/>
 	<!--Note: when connecting the tracker and the first layer, we relieve this distance`-->
-	<param name="max_interval_distance" value="0.5" type="double"/>
+	<param name="max_interval_distance" value="1.5" type="double"/>
 	<param name="w_v" value="10.0" type="double"/>
 	<param name="tracker_name" value="firefly" type="str"/>
 </node>

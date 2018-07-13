@@ -185,7 +185,7 @@ Visualization Manager:
       Marker Topic: /view_points_solver/nodes_in_layer
       Name: Marker
       Namespaces:
-        nodes: true
+        {}
       Queue Size: 100
       Value: true
     - Class: rviz/Marker
@@ -193,7 +193,7 @@ Visualization Manager:
       Marker Topic: /view_points_solver/clicked_pnts
       Name: Marker
       Namespaces:
-        clicked_pnts: true
+        {}
       Queue Size: 100
       Value: true
     - Class: rviz/MarkerArray
@@ -201,7 +201,7 @@ Visualization Manager:
       Marker Topic: /view_points_solver/edge_in_layer
       Name: MarkerArray
       Namespaces:
-        edges: true
+        {}
       Queue Size: 100
       Value: true
   Enabled: true
@@ -229,25 +229,25 @@ Visualization Manager:
   Views:
     Current:
       Class: rviz/Orbit
-      Distance: 5.98845816
+      Distance: 7.51192188
       Enable Stereo Rendering:
         Stereo Eye Separation: 0.0599999987
         Stereo Focal Distance: 1
         Swap Stereo Eyes: false
         Value: false
       Focal Point:
-        X: 7.26604366
-        Y: 2.01275611
-        Z: 7.88853693
+        X: 0.162743494
+        Y: 3.24568105
+        Z: 6.81542635
       Focal Shape Fixed Size: true
       Focal Shape Size: 0.0500000007
       Invert Z Axis: false
       Name: Current View
       Near Clip Distance: 0.00999999978
-      Pitch: 1.20979571
+      Pitch: 1.2247957
       Target Frame: <Fixed Frame>
       Value: Orbit (rviz)
-      Yaw: 1.56038117
+      Yaw: 2.24038196
     Saved: ~
 Window Geometry:
   Camera:
