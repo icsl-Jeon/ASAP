@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<launch>
+
+<!--octomap & keypress launch -->
+
+<include file="$(find image_tracking)/launch/octomap_demo.launch">
+ <arg name="mav_name" value="firefly"/>
+</include>
+
+
+<!--getting search postions from Rviz-->
+<node name="search_position_gui" pkg="rqt_search_position" type="search_position.py"/>
+<!--rviz-->
+<node name="rviz" pkg="rviz" type="rviz" args="-d $(find asap)/rviz/path_solver.rviz"/>
+
+</launch>

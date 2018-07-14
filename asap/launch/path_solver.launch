@@ -1,16 +1,5 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <launch>
-
-<!--octomap & keypress launch -->
-
-<include file="$(find image_tracking)/launch/octomap_demo.launch">
- <arg name="mav_name" value="firefly"/>
-</include>
-
-
-<!--getting search postions from Rviz-->
-<node name="search_position_gui" pkg="rqt_search_position" type="search_position.py"/>
-
 <!--view path solver test-->
 <node name="view_points_solver" pkg="asap" type="asap_path_solver" output="screen" launch-prefix="xterm -e gdb --args">
 	<param name="world_frame_id" value="/world" type="str"/> 
@@ -19,17 +8,13 @@
 	<param name="tracking_d_N" value="3" type="int"/>
 	<param name="elev_min" value="$(eval 3.141592/8)" type="double"/>
 	<param name="elev_max" value="$(eval 3.141592/4)" type="double"/>
-	<param name="N_azim" value="20" type="int"/>
-	<param name="N_elev" value="12" type="int"/>
-	<param name="local_range" value="1" type="int"/>
-	<param name="N_extrema" value="8" type="int"/>
+	<param name="N_azim" value="20" type="int"/> <!--default: 20-->
+	<param name="N_elev" value="12" type="int"/> <!--default: 12-->
+	<param name="local_range" value="1" type="int"/> <!--default: 1-->
+	<param name="N_extrema" value="12" type="int"/> <!--default: 8-->
 	<!--Note: when connecting the tracker and the first layer, we relieve this distance`-->
 	<param name="max_interval_distance" value="1.5" type="double"/>
 	<param name="w_v" value="10.0" type="double"/>
 	<param name="tracker_name" value="firefly" type="str"/>
 </node>
-
-<!--rviz-->
-<node name="rviz" pkg="rviz" type="rviz" args="-d $(find asap)/rviz/path_solver.rviz"/>
-
 </launch>

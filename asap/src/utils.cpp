@@ -61,10 +61,10 @@ IDX maxElem(const MatrixXd& mat){
     IDX max_index;
     double max_val=numeric_limits<double >::min();
     int max_row=0,max_col=0;
-
+	// we apply negative rejection 
     for(long i=0;i<num_row;i++)
         for(long j=0;j<num_col;j++)
-            if (mat.coeff(i,j)>max_val) {
+            if (mat.coeff(i,j)>max_val && mat.coeff(i,j)>0) {
                 max_row = i, max_col = j;
                 max_val=mat.coeff(i,j);
             }

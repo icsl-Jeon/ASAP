@@ -205,7 +205,7 @@ Layer ASAP::get_layer(geometry_msgs::Point light_source,int t_idx){
 		std::cout<<"==============================="<<std::endl;
         // normalization should be performed
         mat_normalize(sdf); // sdf normalized
-
+        bool negative_rejection=true; // we exclude negative local extrema  
         vector<IDX> extrema = localMaxima(sdf,params.N_extrem,params.local_range);
 
         ROS_INFO("found extrema: %d",extrema.size());
@@ -390,7 +390,7 @@ void ASAP::solve_view_path() {
     // find path using Dijkstra algorithm and save the Path into member functions
     GraphPath graphPath=Dijkstra(g,descriptor_map["x0"],descriptor_map["xf"]);
     this->view_path=nav_msgs::Path();
-
+	this->view_path.header.frame_id=world_frame_id;
     std::cout<<"solved path received"<<std::endl;
     for(auto it = graphPath.begin(),end=graphPath.end();it != end;it++){
         VertexName id=*it;
@@ -404,8 +404,8 @@ void ASAP::solve_view_path() {
         }else if(id =="xf"){
             // skip : no insertion
         }else{
-            int t_idx=id[1];
-            int local_idx=id[3]; // let's limit the N_node per layer
+            int t_idx=int(id[1])-'0';
+            int local_idx=int(id[3])-'0'; // let's limit the N_node per layer
             geometry_msgs::PoseStamped poseStamped;
             poseStamped.pose.position=cur_layer_set[t_idx].nodes[local_idx].position;
             view_path.poses.push_back(poseStamped);
