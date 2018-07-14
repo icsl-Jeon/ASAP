@@ -79,7 +79,8 @@ namespace asap_ns {
         int N_node_per_layer;
         vector<float> tracking_ds; // set of tracking distances ! caution::increasing order
         float max_interval_distance; // allowable interval distance of two nodes
-        float w_v; // visibility weight
+        float w_v0; // visibility weight
+        float alpha; // time varying weight factor w_v0*alpha*t_idx or w_v0*alpha^t_idx
         // like linspace
         void set_ds(float start,float end,int N){
             tracking_ds.clear();

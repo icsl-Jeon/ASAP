@@ -287,9 +287,9 @@ void ASAP::add_layer(Layer layer) {
 
             Weight w;
             if(it->visibility==it->visibility)
-                w=dist+params.w_v*it->visibility;
+                w=dist+params.w_v0*(layer.t_idx)*(it->visibility); // we assgin higher weight for later target position
             else
-                w=dist+params.w_v*1;
+                w=dist+params.w_v0*1;
 
             if (dist < params.max_interval_distance+2){
                 boost::add_edge(descriptor_map["x0"], v, w, g);
@@ -341,9 +341,9 @@ void ASAP::add_layer(Layer layer) {
                 if (dist<params.max_interval_distance){
                     Weight w;
                     if(it2->visibility==it2->visibility)
-                        w=P1.distance(P2)+params.w_v*it2->visibility;
+                        w=P1.distance(P2)+params.w_v0*layer.t_idx*it2->visibility;
                     else
-                        w=P1.distance(P2)+params.w_v*1;
+                        w=P1.distance(P2)+params.w_v0*1;
 
 
                     boost::add_edge(descriptor_map[it1->id], descriptor_map[it2->id], w, g);

@@ -30,7 +30,9 @@ int main(int argc,char **argv){
     nh_private.getParam("N_extrema",params.N_extrem);
 
     nh_private.getParam("max_interval_distance",params.max_interval_distance);
-    nh_private.getParam("w_v",params.w_v);
+    nh_private.getParam("w_v0",params.w_v0);
+    nh_private.getParam("alpha",params.alpha);
+
     nh_private.getParam("tracker_name",tracker_name);
     nh_private.getParam("target_name",target_name);
 
@@ -51,7 +53,7 @@ int main(int argc,char **argv){
 
     printf("local maxima search in visibility matrix : search window = %d / N_extrema = %d\n",params.local_range,params.N_extrem);
     printf("max interval disance: %f\n",params.max_interval_distance);
-    printf("weight for visibility in edge connection: %f \n",params.w_v);
+    printf("nominal weight for visibility in edge connection: %f \n",params.w_v0);
 
 
 
