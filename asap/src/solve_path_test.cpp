@@ -28,6 +28,9 @@ int main(int argc,char **argv){
     nh_private.getParam("N_elev",params.N_elev);
     nh_private.getParam("local_range",params.local_range);
     nh_private.getParam("N_extrema",params.N_extrem);
+    nh_private.getParam("N_history",params.N_history);
+    nh_private.getParam("N_prediction",params.N_pred);
+    nh_private.getParam("t_prediction",params.t_pred);
 
     nh_private.getParam("max_interval_distance",params.max_interval_distance);
     nh_private.getParam("w_v0",params.w_v0);
@@ -35,8 +38,6 @@ int main(int argc,char **argv){
 
     nh_private.getParam("tracker_name",tracker_name);
     nh_private.getParam("target_name",target_name);
-
-
 
 
     printf("Parameters summary: \n");
@@ -70,9 +71,11 @@ int main(int argc,char **argv){
 
     // main loop
     while(ros::ok()){
-
         if (asap_obj.octomap_callback_flag && asap_obj.state_callback_flag)
         {
+
+            asap_obj.target_regression();
+            asap_obj.target_future_prediction();
             asap_obj.path_publish();
             asap_obj.marker_publish();
             asap_obj.points_publish();

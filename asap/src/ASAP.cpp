@@ -12,11 +12,22 @@ using namespace asap_ns;
 ASAP::ASAP(Params params):nh("~"){
     // parameter parsing
     this->params=params;
+    // stack of target position history
+    target_history.resize(this->params.N_history);
+    time_history.resize(this->params.N_history);
 
+    // now 
+
+	double duration=0.05; // 20Hz
+
+	check_duration=ros::Duration(duration);
+	check_pnt=ros::Time::now();
 
     nh.getParam("world_frame_id",world_frame_id);
 
     std::cout<<"world frame id:"<<world_frame_id<<std::endl;
+    target_prediction.header.frame_id=world_frame_id;
+
     // subscribe
     octomap_sub=nh.subscribe("/octomap_full",3,&ASAP::octomap_callback,this);
     states_sub=nh.subscribe("/gazebo/model_states",10,&ASAP::state_callback,this);
@@ -25,11 +36,11 @@ ASAP::ASAP(Params params):nh("~"){
 
     // advertise
     path_pub=nh.advertise<nav_msgs::Path>("view_sequence",3);
+    target_pred_path_pub=nh.advertise<nav_msgs::Path>("target_prediction_path",2);
     pnts_pub=nh.advertise<visualization_msgs::Marker>("clicked_pnts",2);
     candidNodes_marker_pub=nh.advertise<visualization_msgs::Marker>("candidate_nodes",2);
     node_pub=nh.advertise<visualization_msgs::Marker>("nodes_in_layer",2);
     edge_pub=nh.advertise<visualization_msgs::MarkerArray>("edge_in_layer",2);
-
 
     // service
     solve_server = nh.advertiseService("solve_path",&ASAP::solve_callback,this);
@@ -98,19 +109,13 @@ ASAP::ASAP(Params params):nh("~"){
     edge_marker.color.r = 0;
     edge_marker.color.a = 0.5;
 
-
     // flags
     state_callback_flag= false;
     state_callback_flag= false;
-
-
-    // target history
-    target_history.header.frame_id=world_frame_id;
+    model_regression_flag=true;
 
     // octomap
     this->octree_obj=new octomap::OcTree(0.1);
-
-	
 
     // azimuth, elevation set constructing
     azim_set.setLinSpaced(params.N_azim,0,2*PI);
@@ -416,14 +421,78 @@ void ASAP::solve_view_path() {
 }
 
 
+void ASAP::target_regression() {
+
+    if (target_history.size()){
+        VectorXd ts(target_history.size()),xs(target_history.size()),ys(target_history.size()),zs(target_history.size());
+        for (int i=0;i<target_history.size();i++){
+			ts.coeffRef(i)=time_history[i];
+            xs.coeffRef(i)=target_history[i].x;
+            ys.coeffRef(i)=target_history[i].y;
+            zs.coeffRef(i)=target_history[i].z;
+        }
+
+		
+
+		std::cout<<"regression started: ----------------"<<std::endl;
+		
+		std::cout<<"ts: "<<ts<<std::endl;
+		std::cout<<"is ts same???"<<std::endl;
+		std::cout<<(ts.coeff(0)==ts.coeff(5))<<std::endl;
+
+		std::cout<<"xs: "<<xs<<std::endl;
+		std::cout<<"ys: "<<ys<<std::endl;
+		std::cout<<"zs: "<<zs<<std::endl;
+
+
+        regress_model[0]=linear_regression(ts,xs);
+        regress_model[1]=linear_regression(ts,ys);
+        regress_model[2]=linear_regression(ts,zs);
+        
+		std::cout<<"current regression model:"<<std::endl;
+		std::cout<<"x: "<<std::endl;
+		std::cout<<"beta0: "<<regress_model[0].beta0<<" beta1: "<<regress_model[0].beta1<<std::endl;
+		std::cout<<"y: "<<std::endl;
+		std::cout<<"beta0: "<<regress_model[1].beta0<<" beta1: "<<regress_model[1].beta1<<std::endl;
+		std::cout<<"z: "<<std::endl;
+		std::cout<<"beta0: "<<regress_model[2].beta0<<" beta1: "<<regress_model[2].beta1<<std::endl;
+
+		
+	
+		model_regression_flag=true;
+    }
+    else
+        ROS_WARN_ONCE("target history does not exist.");
+}
+
+void ASAP::target_future_prediction() {
+    // predict the future trajectory from the last time segment until the next t_pred with N_pred
+
+    if(model_regression_flag) {
+        VectorXd pred_seq(params.N_pred);
+        pred_seq.setLinSpaced(params.N_pred, time_history.back(), time_history.back() + params.t_pred);
+
+        target_prediction = TargetPrediction();
+        target_prediction.header.frame_id = world_frame_id;
+        double t;
+        for (int idx = 0; idx < params.N_pred; idx++) {
+            t = pred_seq.coeff(idx);
+            geometry_msgs::PoseStamped poseStamped;
+            poseStamped.pose.position.x = model_eval(regress_model[0], t);
+            poseStamped.pose.position.y = model_eval(regress_model[1], t);
+            poseStamped.pose.position.z = model_eval(regress_model[2], t);
+            target_prediction.poses.push_back(poseStamped);
+        }
+    }
+}
+
 void ASAP::state_callback(const gazebo_msgs::ModelStates::ConstPtr& gazebo_msg) {
 
     std::vector<std::string> model_names=gazebo_msg->name;
     std::vector<geometry_msgs::Pose> pose_vector=gazebo_msg->pose;
 
-
-    int tracker_idx=std::find(model_names.begin(),model_names.end(),this->tracker_name)-model_names.begin();
-//    int tracker_idx=std::find(model_names.begin(),model_names.end(),this->tracker_name)-model_names.begin();
+    long tracker_idx=std::find(model_names.begin(),model_names.end(),this->tracker_name)-model_names.begin();
+    long target_idx=std::find(model_names.begin(),model_names.end(),this->target_name)-model_names.begin();
 
 
     //extract target state
@@ -433,6 +502,29 @@ void ASAP::state_callback(const gazebo_msgs::ModelStates::ConstPtr& gazebo_msg) 
     }
     else
         ROS_WARN_ONCE("specified tracker name was not found in gazebo");
+
+    //extract target state
+    if (target_idx<model_names.size()) {
+        
+		// we insert every 20Hz for target 
+		
+		if (ros::Time::now()-check_pnt>check_duration)
+		{
+		// update check point 
+		check_pnt=ros::Time::now();
+		// insertion	
+		if(target_history.size()>=this->params.N_history) {
+            target_history.pop_front();
+            time_history.pop_front();
+        }
+        // time and target insertion
+        target_history.push_back(pose_vector[target_idx].position);
+        time_history.push_back(ros::Time::now().toSec());
+    	}
+	}
+    else
+        ROS_WARN_ONCE("specified target name was not found in gazebo");
+
 
 //    //update for visualize
 //    BBMarker.pose=targetPose;
@@ -444,10 +536,7 @@ void ASAP::state_callback(const gazebo_msgs::ModelStates::ConstPtr& gazebo_msg) 
 //    else
 //        ROS_WARN("specified tracker name was not found in gazebo");
 
-
 }
-
-
 void ASAP::points_callback(kiro_gui_msgs::PositionArray positionArray) {
 
     // receive the target history
@@ -469,8 +558,6 @@ void ASAP::points_callback(kiro_gui_msgs::PositionArray positionArray) {
 
     applyColorMap(cvVec,colorVec,COLORMAP_JET);
     split(colorVec,bgr);
-
-
 }
 
 
@@ -569,9 +656,7 @@ void ASAP::marker_publish() {
 
     // edge publish
     edge_pub.publish(arrow_array);
-
 }
-
 
 
 void ASAP::points_publish() {
@@ -583,14 +668,12 @@ void ASAP::points_publish() {
 
     // marker publish
     pnts_pub.publish(pnt_marker);
-
 }
-
 
 void ASAP::path_publish() {
     path_pub.publish(view_path);
+    target_pred_path_pub.publish(target_prediction);
 }
-
 
 ASAP::~ASAP() {
     delete octree_obj;

@@ -16,5 +16,9 @@
 	<param name="max_interval_distance" value="1.5" type="double"/>
 	<param name="w_v0" value="10.0" type="double"/>
 	<param name="tracker_name" value="firefly" type="str"/>
+	<param name="target_name" value="target" type="str"/>
+	<param name="N_history" value="8" type="int"/>
+	<param name="N_prediction" value="4" type="int"/>
+	<param name="t_prediction" value="4" type="double"/>
 </node>
 </launch>

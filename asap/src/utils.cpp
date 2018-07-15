@@ -113,6 +113,31 @@ vector<IDX> localMaxima(const MatrixXd& mat,int numExt,int range){
 
 }
 
+LinearModel linear_regression(const Eigen::VectorXd& ts,const Eigen::VectorXd& xs){
+    // 1st order regression on two set of vectors
+
+    double SS_xy=xs.dot(ts)-xs.sum()*ts.sum()/ts.size();
+    double SS_xx=ts.dot(ts)-pow(ts.sum(),2)/ts.size();
+
+    double beta1=SS_xy/SS_xx;
+    double beta0;
+
+    beta1=SS_xy/SS_xx;
+    beta0=xs.mean()-beta1*ts.mean();
+    LinearModel model;
+    model.beta0=beta0;
+    model.beta1=beta1;
+    return model;
+
+
+
+}
+
+double model_eval(const LinearModel& model,double t){
+    return model.beta0+model.beta1*t;
+}
+
+
 vector<IDX> equal_dist_idx_set(int row,int col,int N_extrema){
 
     int y_dist=ceil(sqrt(float(row)/float(col)*N_extrema));

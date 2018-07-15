@@ -19,7 +19,12 @@ private:
     // linspace for azimuth(col) , elevation(row) set
     Eigen::VectorXf azim_set, elev_set;
     // target history
-    TargetHistory target_history;
+    std::deque<geometry_msgs::Point> target_history;
+    // time history of target
+    std::deque<double> time_history;
+    // target history regression model
+    LinearModel regress_model[3]; // x,y,z
+
     // predicted target history
     TargetPrediction target_prediction;
     // octomap object
@@ -38,8 +43,6 @@ private:
     cv::Mat bgr[3];
 
 
-
-
 public:
     // constructor destructor
     ASAP(asap_ns::Params);
@@ -52,6 +55,8 @@ public:
     void graph_wrapping(); // add the last layer
     void solve_view_path(); // update view sequence of tracker by solving Dijkstra's shortest path algorithm
     MatrixXd castRay(geometry_msgs::Point,float,bool=false); // cast ray in octomap
+    void target_regression(); // regression on history
+    void target_future_prediction(); // update target future trajectory
 
 
     // ROS
@@ -64,6 +69,7 @@ public:
     ros::Publisher candidNodes_marker_pub; // points of local maximum in visibility matrix
     ros::Publisher pnts_pub; // points (clicked points)
     ros::Publisher path_pub; // view path
+    ros::Publisher target_pred_path_pub; // predicted target future history
     ros::Publisher node_pub; // node marker publisher
     ros::Publisher edge_pub; // edge arrow publisher
 
@@ -97,7 +103,6 @@ public:
     void path_publish();   // solution path publication
 
 
-
     // callback (subsrcibe)
     void points_callback(kiro_gui_msgs::PositionArray); // this callback function is for getting point from rviz
     void state_callback(const gazebo_msgs::ModelStates::ConstPtr&);
@@ -108,7 +113,12 @@ public:
     // flags
     bool state_callback_flag;
     bool octomap_callback_flag;
+    bool model_regression_flag;
 
+	// time object
+
+	ros::Time check_pnt;
+	ros::Duration check_duration;
 
     // tracker name
     std::string tracker_name;

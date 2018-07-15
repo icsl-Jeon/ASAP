@@ -13,6 +13,8 @@
 #include <cmath>
 #include <string>
 #include <map>
+#include <deque>
+
 
 // EIGEN
 #include <Eigen/Core>
@@ -89,6 +91,9 @@ namespace asap_ns {
                 tracking_ds.push_back(start+i*delta);
         }
 
+        int N_history; // number of stacked history
+        int N_pred; // number of prediction
+        int t_pred; // prediction horizion [sec]
     };
 
 // candidate node of a layer
@@ -107,6 +112,7 @@ namespace asap_ns {
 
     typedef vector<Layer> LayerSet;
 }
+
 struct ViewVector{
 
     ViewVector(){};
@@ -154,6 +160,11 @@ struct ViewVector{
 
 };
 
+struct LinearModel{
+    // x=beta0+beta1*t
+    double beta0;
+    double beta1;
+};
 
 struct CastResult{
     MatrixXd castResultMat;
@@ -205,4 +216,10 @@ vector<IDX> localMaxima(const MatrixXd&,int,int );
 GraphPath Dijkstra(Graph ,Vertex ,Vertex);
 void mat_normalize(MatrixXd&); // matrix normalization with maximum value
 vector<IDX> equal_dist_idx_set(int,int,int); // equal distribution when no cast is hit by obstacles
+// Linear regression
+LinearModel linear_regression(const Eigen::VectorXd& ,const Eigen::VectorXd& );
+// evaluation with model
+double model_eval(const LinearModel &,double);
+
+
 #endif //ASAP_UTILS_H
