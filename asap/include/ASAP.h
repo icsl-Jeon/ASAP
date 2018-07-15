@@ -9,8 +9,6 @@
 #include "utils.h"
 
 
-
-
 class ASAP{
 
 private:
@@ -25,10 +23,12 @@ private:
     // target history regression model
     LinearModel regress_model[3]; // x,y,z
 
-    // predicted target history
+    // predicted target path
     TargetPrediction target_prediction;
+    // corresponding time vector
+    std::vector<double> planning_horizon;
     // octomap object
-    octomap::OcTree*  octree_obj;
+    std::shared_ptr<octomap::OcTree> octree_obj;
     // set of layers of candidate nodes
     asap_ns::LayerSet cur_layer_set;
     // current position of tracker
@@ -57,6 +57,7 @@ public:
     MatrixXd castRay(geometry_msgs::Point,float,bool=false); // cast ray in octomap
     void target_regression(); // regression on history
     void target_future_prediction(); // update target future trajectory
+    void reactive_planning(); // graph construction + solve path altogether
 
 
     // ROS

@@ -114,8 +114,6 @@ ASAP::ASAP(Params params):nh("~"){
     state_callback_flag= false;
     model_regression_flag=true;
 
-    // octomap
-    this->octree_obj=new octomap::OcTree(0.1);
 
     // azimuth, elevation set constructing
     azim_set.setLinSpaced(params.N_azim,0,2*PI);
@@ -396,11 +394,11 @@ void ASAP::solve_view_path() {
     GraphPath graphPath=Dijkstra(g,descriptor_map["x0"],descriptor_map["xf"]);
     this->view_path=nav_msgs::Path();
 	this->view_path.header.frame_id=world_frame_id;
-    std::cout<<"solved path received"<<std::endl;
+//    std::cout<<"solved path received"<<std::endl;
     for(auto it = graphPath.begin(),end=graphPath.end();it != end;it++){
         VertexName id=*it;
 
-        std::cout<<"this id:"<<id<<" ";
+//        std::cout<<"this id:"<<id<<" ";
 
         if (id == "x0"){
             geometry_msgs::PoseStamped poseStamped;
@@ -416,7 +414,7 @@ void ASAP::solve_view_path() {
             view_path.poses.push_back(poseStamped);
         }
     }
-    std::cout<<std::endl;
+//    std::cout<<std::endl;
 
 }
 
@@ -434,28 +432,28 @@ void ASAP::target_regression() {
 
 		
 
-		std::cout<<"regression started: ----------------"<<std::endl;
-		
-		std::cout<<"ts: "<<ts<<std::endl;
-		std::cout<<"is ts same???"<<std::endl;
-		std::cout<<(ts.coeff(0)==ts.coeff(5))<<std::endl;
-
-		std::cout<<"xs: "<<xs<<std::endl;
-		std::cout<<"ys: "<<ys<<std::endl;
-		std::cout<<"zs: "<<zs<<std::endl;
+//		std::cout<<"regression started: ----------------"<<std::endl;
+//
+//		std::cout<<"ts: "<<ts<<std::endl;
+//		std::cout<<"is ts same???"<<std::endl;
+//		std::cout<<(ts.coeff(0)==ts.coeff(5))<<std::endl;
+//
+//		std::cout<<"xs: "<<xs<<std::endl;
+//		std::cout<<"ys: "<<ys<<std::endl;
+//		std::cout<<"zs: "<<zs<<std::endl;
 
 
         regress_model[0]=linear_regression(ts,xs);
         regress_model[1]=linear_regression(ts,ys);
         regress_model[2]=linear_regression(ts,zs);
         
-		std::cout<<"current regression model:"<<std::endl;
-		std::cout<<"x: "<<std::endl;
-		std::cout<<"beta0: "<<regress_model[0].beta0<<" beta1: "<<regress_model[0].beta1<<std::endl;
-		std::cout<<"y: "<<std::endl;
-		std::cout<<"beta0: "<<regress_model[1].beta0<<" beta1: "<<regress_model[1].beta1<<std::endl;
-		std::cout<<"z: "<<std::endl;
-		std::cout<<"beta0: "<<regress_model[2].beta0<<" beta1: "<<regress_model[2].beta1<<std::endl;
+//		std::cout<<"current regression model:"<<std::endl;
+//		std::cout<<"x: "<<std::endl;
+//		std::cout<<"beta0: "<<regress_model[0].beta0<<" beta1: "<<regress_model[0].beta1<<std::endl;
+//		std::cout<<"y: "<<std::endl;
+//		std::cout<<"beta0: "<<regress_model[1].beta0<<" beta1: "<<regress_model[1].beta1<<std::endl;
+//		std::cout<<"z: "<<std::endl;
+//		std::cout<<"beta0: "<<regress_model[2].beta0<<" beta1: "<<regress_model[2].beta1<<std::endl;
 
 		
 	
@@ -470,8 +468,9 @@ void ASAP::target_future_prediction() {
 
     if(model_regression_flag) {
         VectorXd pred_seq(params.N_pred);
-        pred_seq.setLinSpaced(params.N_pred, time_history.back(), time_history.back() + params.t_pred);
+        planning_horizon.clear();
 
+        pred_seq.setLinSpaced(params.N_pred, time_history.back(), time_history.back() + params.t_pred);
         target_prediction = TargetPrediction();
         target_prediction.header.frame_id = world_frame_id;
         double t;
@@ -482,9 +481,61 @@ void ASAP::target_future_prediction() {
             poseStamped.pose.position.y = model_eval(regress_model[1], t);
             poseStamped.pose.position.z = model_eval(regress_model[2], t);
             target_prediction.poses.push_back(poseStamped);
+            planning_horizon.push_back(t);
         }
     }
 }
+
+void ASAP::reactive_planning() {
+
+
+    // after retreiving the target prediction (model_regression_flag=true)
+    // Building graph
+
+    graph_init();
+    int t_idx=1;
+//    ROS_INFO("size of prediction pnts: %d",target_prediction.poses.size());
+    for (auto it = target_prediction.poses.begin(),end=target_prediction.poses.end();it != end;it++,t_idx++)
+    {
+
+        Layer layer=get_layer(it->pose.position,t_idx);
+//        printf("------------------------------\n");
+//        ROS_INFO("found layer: %dth predicition",t_idx);
+        add_layer(layer);
+    }
+
+    graph_wrapping();
+    ROS_INFO("finished graph");
+
+
+//    // graph inspection
+//
+//    IndexMap index = get(boost::vertex_index, g);
+//    std::cout << "vertices(g) = ";
+//    typedef boost::graph_traits<Graph>::vertex_iterator vertex_iter;
+//    std::pair<vertex_iter, vertex_iter> vp;
+//    for (vp = vertices(g); vp.first != vp.second; ++vp.first) {
+//        Vertex v = *vp.first;
+//        std::cout << index[v] <<  " ";
+//    }
+//    std::cout << std::endl;
+//
+//    std::cout << "edges(g) = ";
+//    boost::graph_traits<Graph>::edge_iterator ei, ei_end;
+//    for (boost::tie(ei, ei_end) = edges(g); ei != ei_end; ++ei)
+//        std::cout << "(" << index[source(*ei, g)]
+//                  << "," << index[target(*ei, g)] << ") ";
+//    std::cout << std::endl;
+//
+//
+//    std::cout << "number of node markers: "<<node_marker.points.size()<<std::endl;
+
+
+    solve_view_path();
+    ROS_INFO("Dijkstra solved");
+
+}
+
 
 void ASAP::state_callback(const gazebo_msgs::ModelStates::ConstPtr& gazebo_msg) {
 
@@ -614,18 +665,14 @@ void ASAP::octomap_callback(const octomap_msgs::Octomap & msg) {
 
 
     octomap_callback_flag=true;
-    octomap::AbstractOcTree* octree;
 
+//    octree_obj->clear();
+//    octomap_msgs::readTree(octree_obj,msg);
 
-    octomap_msgs::readTree(octree_obj,msg);
-
+    octree_obj.reset(dynamic_cast<octomap::OcTree*>(octomap_msgs::fullMsgToMap(msg)));
+    //octree update
 
 //
-//    octree=octomap_msgs::fullMsgToMap(msg);
-//    //octree update
-//    this->octree_obj=(dynamic_cast<octomap::OcTree*>(octree));
-
-
 //
 //    // free node around target
 //    point3d light_start(targetPose.position.x,targetPose.position.y,targetPose.position.z);
@@ -681,7 +728,7 @@ void ASAP::path_publish() {
 }
 
 ASAP::~ASAP() {
-    delete octree_obj;
+    delete octree_obj.get();
 }
 
 
