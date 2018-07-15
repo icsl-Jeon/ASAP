@@ -616,9 +616,14 @@ void ASAP::octomap_callback(const octomap_msgs::Octomap & msg) {
     octomap_callback_flag=true;
     octomap::AbstractOcTree* octree;
 
-    octree=octomap_msgs::fullMsgToMap(msg);
-    //octree update
-    this->octree_obj=(dynamic_cast<octomap::OcTree*>(octree));
+
+    octomap_msgs::readTree(octree_obj,msg);
+
+
+//
+//    octree=octomap_msgs::fullMsgToMap(msg);
+//    //octree update
+//    this->octree_obj=(dynamic_cast<octomap::OcTree*>(octree));
 
 
 //
