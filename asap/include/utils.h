@@ -34,6 +34,8 @@
 #include <visualization_msgs/MarkerArray.h>
 #include <kiro_gui_msgs/PositionArray.h>
 #include <asap/SolvePath.h>
+#include <mav_msgs/conversions.h>
+#include <mav_msgs/default_topics.h>
 
 
 // OPENCV
@@ -181,7 +183,7 @@ struct CastResult{
 typedef Vector2i IDX; // index type = (row,col)
 typedef string VertexName;
 
-typedef float Weight;
+typedef double Weight;
 typedef boost::property<boost::edge_weight_t, Weight> WeightProperty;
 typedef boost::property<boost::vertex_name_t, std::string> NameProperty;
 
@@ -215,11 +217,15 @@ vector<IDX> localMaxima(const MatrixXd&,int,int );
 // finding shortest path using Dijkstra's path alogrithm
 GraphPath Dijkstra(Graph ,Vertex ,Vertex);
 void mat_normalize(MatrixXd&); // matrix normalization with maximum value
-vector<IDX> equal_dist_idx_set(int,int,int); // equal distribution when no cast is hit by obstacles
+vector<IDX> equal_dist_idx_set(int,int,int,int); // equal distribution when no cast is hit by obstacles
 // Linear regression
 LinearModel linear_regression(const Eigen::VectorXd& ,const Eigen::VectorXd& );
 // evaluation with model
 double model_eval(const LinearModel &,double);
+// interpolation to get a waypoint
+double interpolate(std::vector<double> &,std::vector<double> &,double,bool);
+// extract xyz std::vector from nav_msgs
+void path2vec(const nav_msgs::Path&,std::vector<double> &,std::vector<double> &,std::vector<double> &);
 
 
 #endif //ASAP_UTILS_H

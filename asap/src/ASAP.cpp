@@ -16,17 +16,20 @@ ASAP::ASAP(Params params):nh("~"){
     target_history.resize(this->params.N_history);
     time_history.resize(this->params.N_history);
 
-    // now 
-
+    // now
 	double duration=0.05; // 20Hz
-
 	check_duration=ros::Duration(duration);
+    // history horizon = duration x N_history
 	check_pnt=ros::Time::now();
+    init_time=ros::Time::now();
+
 
     nh.getParam("world_frame_id",world_frame_id);
 
     std::cout<<"world frame id:"<<world_frame_id<<std::endl;
     target_prediction.header.frame_id=world_frame_id;
+
+    quad_waypoint.header.frame_id=world_frame_id;
 
     // subscribe
     octomap_sub=nh.subscribe("/octomap_full",3,&ASAP::octomap_callback,this);
@@ -41,6 +44,17 @@ ASAP::ASAP(Params params):nh("~"){
     candidNodes_marker_pub=nh.advertise<visualization_msgs::Marker>("candidate_nodes",2);
     node_pub=nh.advertise<visualization_msgs::Marker>("nodes_in_layer",2);
     edge_pub=nh.advertise<visualization_msgs::MarkerArray>("edge_in_layer",2);
+    BBMarker_pub=nh.advertise<visualization_msgs::Marker>("bounding_box_target",2);
+
+	// bgr colormap setting
+    cv::Mat cvVec(1,params.N_pred,CV_8UC1);
+    cv::Mat colorVec;
+    for(int i=0;i<params.N_pred;i++)
+        cvVec.at<uchar>(i)=i*(255/float(params.N_pred-1));
+
+    applyColorMap(cvVec,colorVec,COLORMAP_JET);
+    split(colorVec,bgr);
+   
 
     // service
     solve_server = nh.advertiseService("solve_path",&ASAP::solve_callback,this);
@@ -65,7 +79,7 @@ ASAP::ASAP(Params params):nh("~"){
     pnt_marker.header.stamp  = ros::Time::now();
     pnt_marker.ns = "clicked_pnts";
     pnt_marker.action = visualization_msgs::Marker::ADD;
-    float len=0.2;
+    float len=0.1;
     pnt_marker.pose.orientation.w = 1.0;
     pnt_marker.id = 0;
     pnt_marker.type = visualization_msgs::Marker::CUBE_LIST;
@@ -89,6 +103,7 @@ ASAP::ASAP(Params params):nh("~"){
     node_marker.scale.z = scale/2;
 //    node_marker.color.r = 1;
     node_marker.color.a = 0.8;
+	node_marker.lifetime=ros::Duration(duration);
 
 
     // edge marker init
@@ -101,13 +116,39 @@ ASAP::ASAP(Params params):nh("~"){
     edge_marker.pose.orientation.w = 1.0;
     edge_marker.id = edge_id;
     edge_marker.type = visualization_msgs::Marker::ARROW;
-    edge_marker.scale.x = 0.01;
-    edge_marker.scale.y = 0.02;
-    edge_marker.scale.z = 0.02;
+    edge_marker.scale.x = 0.008;
+    edge_marker.scale.y = 0.01;
+    edge_marker.scale.z = 0.01;
     edge_marker.color.b = 0.8;
     edge_marker.color.g = 0.8;
     edge_marker.color.r = 0;
     edge_marker.color.a = 0.5;
+    edge_marker.lifetime=ros::Duration(duration);
+
+
+
+
+    // Bounded Box around target
+    BBMarker.header.frame_id=world_frame_id;
+    BBMarker.header.stamp=ros::Time::now();
+    BBMarker.ns="targetBB";
+    BBMarker.action=visualization_msgs::Marker::ADD;
+    BBMarker.id=0;
+    BBMarker.type=visualization_msgs::Marker::CUBE;
+
+    BBMarker.pose.orientation.x = 0.0;
+    BBMarker.pose.orientation.y = 0.0;
+    BBMarker.pose.orientation.z = 0.0;
+    BBMarker.pose.orientation.w = 1.0;
+    double lx=0.5,ly=0.5,lz=0.5;
+
+    BBMarker.scale.x = lx * 2;
+    BBMarker.scale.y = ly * 2;
+    BBMarker.scale.z = lz * 2 ;
+
+    BBMarker.color.r=1.0;
+    BBMarker.color.a=0.2;
+
 
     // flags
     state_callback_flag= false;
@@ -120,11 +161,24 @@ ASAP::ASAP(Params params):nh("~"){
     elev_set.setLinSpaced(params.N_elev,params.elev_min,params.elev_max);
 }
 
+void ASAP::hovering(ros::Duration dur,double hovering_z){
+	
+        double hovering_start= ros::Time::now().toSec();
+		ROS_INFO_ONCE("hovering during %f [sec]",dur.toSec());
+	    Eigen::Vector3d waypoint(0, 0,hovering_z);
+		mav_msgs::msgMultiDofJointTrajectoryFromPositionYaw(waypoint,0, &quad_waypoint);
+   		
+		while (ros::Time::now().toSec()-hovering_start<dur.toSec())
+        traj_pub.publish(quad_waypoint);
+	
+}
 
 void ASAP::graph_init() {
     // graph init
     g=Graph();
-    
+    descriptor_map.clear();
+    cur_layer_set.clear();
+
     Vertex x0 = boost::add_vertex(std::string("x0"), g);
     descriptor_map.insert(make_pair("x0",x0));
 
@@ -135,6 +189,7 @@ void ASAP::graph_init() {
 
     // clear the markers
     node_marker.points.clear();
+    node_marker.colors.clear();
     arrow_array.markers.clear();
 	edge_id=0;
 }
@@ -190,39 +245,53 @@ Layer ASAP::get_layer(geometry_msgs::Point light_source,int t_idx){
 
     Params & param=this->params;
     int local_key=0;
-
+    bool isFree;
     Layer layer;
     layer.t_idx=t_idx;
+    MatrixXd sdf;
 
     // casting ray
     for(vector<float>::iterator it = param.tracking_ds.begin(); it!=param.tracking_ds.end();++it)
     {
         float cur_d=*it;
         MatrixXd binaryCast=castRay(light_source,cur_d);
-		MatrixXd sdf = SEDT(binaryCast); // signed distance field
+        vector<IDX> extrema;
+        // if we SEDT on zero matrix, it will be disaster
+        if(binaryCast.isZero(0)) {
+            isFree=true;
+//            std::cout << "===============================" << std::endl;
+//            std::cout << binaryCast << std::endl;
+//            std::cout << "-------------------------------" << std::endl;
+//            std::cout << "Equal distribution" <<std::endl;
+//            std::cout << "===============================" << std::endl;
+            extrema = equal_dist_idx_set(binaryCast.rows(), binaryCast.cols(),2,8);
+//            ROS_INFO("found extrema: %d", extrema.size());
 
-		std::cout<<"==============================="<<std::endl;
-		std::cout<<binaryCast<<std::endl;
-		std::cout<<"-------------------------------"<<std::endl;
-        std::cout<<sdf<<std::endl;
-		std::cout<<"==============================="<<std::endl;
-        // normalization should be performed
-        mat_normalize(sdf); // sdf normalized
-        bool negative_rejection=true; // we exclude negative local extrema  
-        vector<IDX> extrema = localMaxima(sdf,params.N_extrem,params.local_range);
+        }
+        else {
 
-        ROS_INFO("found extrema: %d",extrema.size());
+            sdf = SEDT(binaryCast); // signed distance field
+            isFree=false;
+//            std::cout << "===============================" << std::endl;
+//            std::cout << binaryCast << std::endl;
+//            std::cout << "-------------------------------" << std::endl;
+//            std::cout << sdf << std::endl;
+//            std::cout << "===============================" << std::endl;
+            // normalization should be performed
+            mat_normalize(sdf); // sdf normalized
+            extrema = localMaxima(sdf, params.N_extrem, params.local_range);
+//            ROS_INFO("found extrema: %d", extrema.size());
+        }
 
         // insert N_extrem many nodes
-        for(vector<IDX>::iterator it_idx = extrema.begin();it_idx!=extrema.end();it_idx++)
-        {
+        for(vector<IDX>::iterator it_idx = extrema.begin();it_idx!=extrema.end();it_idx++) {
 
             IDX idx=*it_idx;
-            ROS_INFO("extrema: [%d, %d]",idx[0],idx[1]);
+//            ROS_INFO("extrema: [%d, %d]",idx[0],idx[1]);
 
             float cur_azim=azim_set[idx(1)];
             float cur_elev=elev_set[idx(0)];
-            ROS_INFO("azim,elev: [%f, %f]",cur_azim,cur_elev);
+//            ROS_INFO("azim,elev: [%f, %f]",cur_azim,cur_elev);
 
 
             ViewVector viewVector;
@@ -234,9 +303,12 @@ Layer ASAP::get_layer(geometry_msgs::Point light_source,int t_idx){
 //            candidNode.id="d"+to_string(d_key)+"_"+to_string(local_key);
             candidNode.id="t"+to_string(t_idx)+"_"+to_string(local_key);
             candidNode.position=viewVector.getEndPnt();
-            candidNode.visibility=sdf(idx[0],idx[1]);
-            layer.nodes.push_back(candidNode);
 
+            if(!isFree)
+                candidNode.visibility=sdf(idx[0],idx[1]);
+            else
+                candidNode.visibility=0.1;
+            layer.nodes.push_back(candidNode);
             local_key++;
         }
     }
@@ -260,7 +332,7 @@ void ASAP::add_layer(Layer layer) {
 
     // only base layer exits
     else if (cur_layer_set.size()==1) {
-        ROS_INFO("current tracker position: [%f, %f, %f]\n",cur_tracker_pos.x,cur_tracker_pos.y,cur_tracker_pos.z);
+//        ROS_INFO("current tracker position: [%f, %f, %f]\n",cur_tracker_pos.x,cur_tracker_pos.y,cur_tracker_pos.z);
         for (vector<CandidNode>::iterator it = layer.nodes.begin(); it != layer.nodes.end(); it++) {
 
 
@@ -270,10 +342,10 @@ void ASAP::add_layer(Layer layer) {
 
             node_marker.points.push_back(it->position);
             std_msgs::ColorRGBA c;
-            float red=(bgr[2]).at<uchar>(layer.t_idx-1)/255.0;
-            float green=(bgr[1]).at<uchar>(layer.t_idx-1)/255.0;
-            float blue=(bgr[0]).at<uchar>(layer.t_idx-1)/255.0;
-            c.r=red; c.g=green; c.b=blue; c.a=0.7;
+            double red=(bgr[2]).at<uchar>(layer.t_idx-1)/255.0;
+            double green=(bgr[1]).at<uchar>(layer.t_idx-1)/255.0;
+            double blue=(bgr[0]).at<uchar>(layer.t_idx-1)/255.0;
+            c.r=float(red); c.g=float(green); c.b=float(blue); c.a=0.7;
             node_marker.colors.push_back(c);
 
 
@@ -289,12 +361,9 @@ void ASAP::add_layer(Layer layer) {
             float dist = P1.distance(P2);
 
             Weight w;
-            if(it->visibility==it->visibility)
-                w=dist+params.w_v0*(layer.t_idx)*(it->visibility); // we assgin higher weight for later target position
-            else
-                w=dist+params.w_v0*1;
+            w=dist+params.w_v0*(layer.t_idx)/(it->visibility); // we assgin higher weight for later target position
 
-            if (dist < params.max_interval_distance+2){
+            if (dist <5){
                 boost::add_edge(descriptor_map["x0"], v, w, g);
                 edge_marker.points.clear();
                 edge_marker.points.push_back(cur_tracker_pos);
@@ -305,7 +374,7 @@ void ASAP::add_layer(Layer layer) {
             }
 
         }
-        printf("---------connecting complete--------\n");
+//        printf("---------connecting complete--------\n");
         // insert this layer
         cur_layer_set.push_back(layer);
     }
@@ -322,10 +391,10 @@ void ASAP::add_layer(Layer layer) {
             // marker construct
             node_marker.points.push_back(it->position);
             std_msgs::ColorRGBA c;
-            float red=(bgr[2]).at<uchar>(layer.t_idx-1)/255.0;
-            float green=(bgr[1]).at<uchar>(layer.t_idx-1)/255.0;
-            float blue=(bgr[0]).at<uchar>(layer.t_idx-1)/255.0;
-            c.r=red; c.g=green; c.b=blue; c.a=0.7;
+            double red=(bgr[2]).at<uchar>(layer.t_idx-1)/255.0;
+            double green=(bgr[1]).at<uchar>(layer.t_idx-1)/255.0;
+            double blue=(bgr[0]).at<uchar>(layer.t_idx-1)/255.0;
+            c.r=float(red); c.g=float(green); c.b=float(blue); c.a=0.7;
             node_marker.colors.push_back(c);
 
 
@@ -343,10 +412,7 @@ void ASAP::add_layer(Layer layer) {
 //                printf("node distance: %.4f\n",dist);
                 if (dist<params.max_interval_distance){
                     Weight w;
-                    if(it2->visibility==it2->visibility)
-                        w=P1.distance(P2)+params.w_v0*layer.t_idx*it2->visibility;
-                    else
-                        w=P1.distance(P2)+params.w_v0*1;
+                    w=P1.distance(P2)+params.w_v0*layer.t_idx/it2->visibility;
 
 
                     boost::add_edge(descriptor_map[it1->id], descriptor_map[it2->id], w, g);
@@ -359,7 +425,7 @@ void ASAP::add_layer(Layer layer) {
                 }
             }
 
-        printf("---------connecting complete--------\n");
+//        printf("---------connecting complete--------\n");
         cur_layer_set.push_back(layer);
 
     }
@@ -377,7 +443,6 @@ void ASAP::graph_wrapping() {
     CandidNode dummy_node;
     dummy_node.id="xf";
     finishing_layer.nodes.push_back(dummy_node);
-    ROS_INFO("layer copy constructor");
     // connect all the nodes in the last layer with dummy node having assigning weight
     Layer prev_layer= cur_layer_set.back();
     for(auto it = prev_layer.nodes.begin(),end=prev_layer.nodes.end();it != end;it++){
@@ -386,14 +451,18 @@ void ASAP::graph_wrapping() {
     }
 
     cur_layer_set.push_back(finishing_layer);
-
 }
 
 void ASAP::solve_view_path() {
-    // find path using Dijkstra algorithm and save the Path into member functions
+    // find path using and save the Path into member functions
     GraphPath graphPath=Dijkstra(g,descriptor_map["x0"],descriptor_map["xf"]);
+ 	
+//	printf("--------------Path solve----------------------");
+
     this->view_path=nav_msgs::Path();
 	this->view_path.header.frame_id=world_frame_id;
+
+    if (graphPath.size())
 //    std::cout<<"solved path received"<<std::endl;
     for(auto it = graphPath.begin(),end=graphPath.end();it != end;it++){
         VertexName id=*it;
@@ -404,18 +473,25 @@ void ASAP::solve_view_path() {
             geometry_msgs::PoseStamped poseStamped;
             poseStamped.pose.position=cur_tracker_pos;
             view_path.poses.push_back(poseStamped);
+			std::cout<<std::endl;			
         }else if(id =="xf"){
             // skip : no insertion
         }else{
+            // str =  "t1_1" or "t1_13" for example
             int t_idx=int(id[1])-'0';
-            int local_idx=int(id[3])-'0'; // let's limit the N_node per layer
+            int local_idx;
+            if(id.length()==5)
+                local_idx=(int(id[3])-'0')*10+int(id[4])-'0'; // let's limit the N_node per layer
+            else
+                local_idx=int(id[3])-'0';
+        	
+//			std::cout<<"extracted local_idx: "<<local_idx<<std::endl;
             geometry_msgs::PoseStamped poseStamped;
             poseStamped.pose.position=cur_layer_set[t_idx].nodes[local_idx].position;
             view_path.poses.push_back(poseStamped);
         }
     }
 //    std::cout<<std::endl;
-
 }
 
 
@@ -469,8 +545,7 @@ void ASAP::target_future_prediction() {
     if(model_regression_flag) {
         VectorXd pred_seq(params.N_pred);
         planning_horizon.clear();
-
-        pred_seq.setLinSpaced(params.N_pred, time_history.back(), time_history.back() + params.t_pred);
+        pred_seq.setLinSpaced(params.N_pred, ros::Time::now().toSec(), ros::Time::now().toSec() + params.t_pred);
         target_prediction = TargetPrediction();
         target_prediction.header.frame_id = world_frame_id;
         double t;
@@ -483,10 +558,14 @@ void ASAP::target_future_prediction() {
             target_prediction.poses.push_back(poseStamped);
             planning_horizon.push_back(t);
         }
+
     }
 }
 
 void ASAP::reactive_planning() {
+
+    planning_horizon_saved=planning_horizon;
+
 
 
     // after retreiving the target prediction (model_regression_flag=true)
@@ -505,7 +584,7 @@ void ASAP::reactive_planning() {
     }
 
     graph_wrapping();
-    ROS_INFO("finished graph");
+//    ROS_INFO("finished graph");
 
 
 //    // graph inspection
@@ -532,10 +611,50 @@ void ASAP::reactive_planning() {
 
 
     solve_view_path();
-    ROS_INFO("Dijkstra solved");
+
+
 
 }
 
+
+void ASAP::asap_planning(){
+    target_regression();
+    target_future_prediction();
+    reactive_planning();
+}
+
+void ASAP::quad_waypoint_pub() {
+
+
+
+    if(view_path.poses.size()) {
+        double now = ros::Time::now().toSec();
+
+
+        std::cout<<"now: "<<now<<" planning time horizon: [";
+        for(auto it=planning_horizon_saved.begin(),end=planning_horizon_saved.end();it!=end;it++)
+            std::cout<<*it<<" ";
+        std::cout<<"]"<<std::endl;
+
+
+        std::vector<double> xs, ys, zs;
+        // for interpolation
+        path2vec(view_path, xs, ys, zs);
+        // interpolation
+        double x = interpolate(planning_horizon_saved, xs, now, true);
+        double y = interpolate(planning_horizon_saved, ys, now, true);
+        double z = interpolate(planning_horizon_saved, zs, now, true);
+
+        Eigen::Vector3d waypoint(x, y, z);
+        double yaw = atan2(cur_tracker_pos.y - cur_target_pos.y, cur_tracker_pos.x - cur_target_pos.x) + PI;
+
+        quad_waypoint.header.stamp = ros::Time::now();
+        mav_msgs::msgMultiDofJointTrajectoryFromPositionYaw(waypoint, yaw, &quad_waypoint);
+
+        traj_pub.publish(quad_waypoint);
+
+    }
+}
 
 void ASAP::state_callback(const gazebo_msgs::ModelStates::ConstPtr& gazebo_msg) {
 
@@ -556,7 +675,9 @@ void ASAP::state_callback(const gazebo_msgs::ModelStates::ConstPtr& gazebo_msg) 
 
     //extract target state
     if (target_idx<model_names.size()) {
-        
+
+        cur_target_pos=pose_vector[target_idx].position;
+
 		// we insert every 20Hz for target 
 		
 		if (ros::Time::now()-check_pnt>check_duration)
@@ -600,15 +721,6 @@ void ASAP::points_callback(kiro_gui_msgs::PositionArray positionArray) {
 
     ROS_INFO("%d points received",N);
 
-
-    cv::Mat cvVec(1,N,CV_8UC1);
-    cv::Mat colorVec;
-
-    for(int i=0;i<N;i++)
-        cvVec.at<uchar>(i)=i*(255/float(N-1));
-
-    applyColorMap(cvVec,colorVec,COLORMAP_JET);
-    split(colorVec,bgr);
 }
 
 
@@ -672,34 +784,41 @@ void ASAP::octomap_callback(const octomap_msgs::Octomap & msg) {
     octree_obj.reset(dynamic_cast<octomap::OcTree*>(octomap_msgs::fullMsgToMap(msg)));
     //octree update
 
-//
-//
-//    // free node around target
-//    point3d light_start(targetPose.position.x,targetPose.position.y,targetPose.position.z);
-//
-//
-//    double thresMin = octree_obj->getClampingThresMin();
-//
-//
-//    for (OcTree::leaf_bbx_iterator it = octree_obj->begin_leafs_bbx(freebox_min_point + light_start,
-//                                                                    freebox_max_point + light_start),
-//                 end = octree_obj->end_leafs_bbx(); it != end; ++it)
-//        it->setLogOdds(octomap::logodds(thresMin));
-//
-//    octree_obj->updateInnerOccupancy();
+
+
+
+
+    // free node around target
+    octomap::point3d light_start(cur_target_pos.x,cur_target_pos.y,cur_target_pos.z);
+    double lx=0.5,ly=0.5,lz=0.5;
+
+    octomap::point3d freebox_min_point(-lx,-ly,-lz);
+    octomap::point3d freebox_max_point(lx,ly,lz);
+    double thresMin = octree_obj->getClampingThresMin();
+
+    for (octomap::OcTree::leaf_bbx_iterator it = octree_obj->begin_leafs_bbx(freebox_min_point + light_start,
+                                                                    freebox_max_point + light_start),
+                 end = octree_obj->end_leafs_bbx(); it != end; ++it)
+        it->setLogOdds(octomap::logodds(thresMin));
+
+    octree_obj->updateInnerOccupancy();
+
+    // bounding box (freed region of target)
+    BBMarker.pose.position=cur_target_pos;
+    BBMarker_pub.publish(BBMarker);
 
 }
 
 void ASAP::marker_publish() {
 
-    // marker construction
-    marker.points.clear();
-    for (auto layer_it = cur_layer_set.begin(),layer_end=cur_layer_set.end();layer_it != layer_end;layer_it++)
-        for (auto node_it = layer_it->nodes.begin(),node_end=layer_it->nodes.end();node_it != node_end;node_it++)
-            marker.points.push_back(node_it->position);
-
-    // marker publish
-    candidNodes_marker_pub.publish(marker);
+//    // marker construction
+//    marker.points.clear();
+//    for (auto layer_it = cur_layer_set.begin(),layer_end=cur_layer_set.end();layer_it != layer_end;layer_it++)
+//        for (auto node_it = layer_it->nodes.begin(),node_end=layer_it->nodes.end();node_it != node_end;node_it++)
+//            marker.points.push_back(node_it->position);
+//
+//    // marker publish
+//    candidNodes_marker_pub.publish(marker);
 
     // node publish
     if (node_marker.points.size())
@@ -723,9 +842,13 @@ void ASAP::points_publish() {
 }
 
 void ASAP::path_publish() {
+
     path_pub.publish(view_path);
     target_pred_path_pub.publish(target_prediction);
+
 }
+
+
 
 ASAP::~ASAP() {
     delete octree_obj.get();

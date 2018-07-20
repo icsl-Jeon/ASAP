@@ -12,7 +12,6 @@ int main(int argc,char **argv){
     float tracking_d_min,tracking_d_max;
     int N_tracking_d;
 
-
     std::string tracker_name,target_name;
 
     nh_private.getParam("tracking_d_min", tracking_d_min);
@@ -69,13 +68,26 @@ int main(int argc,char **argv){
     // initialize
     ros::Duration(1.0).sleep();
 
+    // planning check point
+    ros::Time planning_ckp=ros::Time::now();
+	asap_obj.traj_pub= nh_private.advertise<trajectory_msgs::MultiDOFJointTrajectory>(
+            "/"+tracker_name+"/"+mav_msgs::default_topics::COMMAND_TRAJECTORY, 10);
+	asap_obj.hovering(ros::Duration(1.0),double(1));
+
     // main loop
     while(ros::ok()){
         if (asap_obj.octomap_callback_flag && asap_obj.state_callback_flag)
         {
 
-//            asap_obj.target_regression();
-//            asap_obj.target_future_prediction();
+
+            asap_obj.target_regression();
+            asap_obj.target_future_prediction();
+            // planning once this condition is satisfied
+            if(ros::Time::now().toSec()-planning_ckp.toSec()>ros::Duration(params.t_pred).toSec()*0.6) {
+                asap_obj.reactive_planning(); planning_ckp=ros::Time::now();
+            }
+
+            asap_obj.quad_waypoint_pub();
             asap_obj.path_publish();
             asap_obj.marker_publish();
             asap_obj.points_publish();

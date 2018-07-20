@@ -27,20 +27,26 @@ private:
     TargetPrediction target_prediction;
     // corresponding time vector
     std::vector<double> planning_horizon;
+    std::vector<double> planning_horizon_saved;
+
+    // sequnce of viewpoints
+    ViewSequence view_path;
     // octomap object
     std::shared_ptr<octomap::OcTree> octree_obj;
     // set of layers of candidate nodes
     asap_ns::LayerSet cur_layer_set;
     // current position of tracker
     geometry_msgs::Point cur_tracker_pos;
-    // sequnce of viewpoints
-    ViewSequence view_path;
+    geometry_msgs::Point cur_target_pos;
+
     // graph for VP computation
     Graph g;
     // dictionary for vertex descriptor
     DescriptorMap descriptor_map;
     // color map for plotting the candidate node
     cv::Mat bgr[3];
+    // quad_path
+    trajectory_msgs::MultiDOFJointTrajectory quad_waypoint;
 
 
 public:
@@ -58,8 +64,9 @@ public:
     void target_regression(); // regression on history
     void target_future_prediction(); // update target future trajectory
     void reactive_planning(); // graph construction + solve path altogether
-
-
+    void asap_planning(); // regression+prediction+planning
+    void quad_waypoint_pub(); // waypoint publish for quad
+	void hovering(ros::Duration,double); // execute hovering for quadrotor
     // ROS
     ros::NodeHandle nh; // getting parameters
 
@@ -73,9 +80,8 @@ public:
     ros::Publisher target_pred_path_pub; // predicted target future history
     ros::Publisher node_pub; // node marker publisher
     ros::Publisher edge_pub; // edge arrow publisher
-
-
-
+    ros::Publisher traj_pub; // trajectory publisher
+    ros::Publisher BBMarker_pub; // bounding box publisher
 
     ros::ServiceServer solve_server; // server for solving view path
 
@@ -89,6 +95,7 @@ public:
     visualization_msgs::Marker node_marker; // marker for nodes
     visualization_msgs::Marker edge_marker; // marker for edges
     visualization_msgs::MarkerArray arrow_array; // array of arrow
+    visualization_msgs::Marker BBMarker; // bounding box marker
 	int edge_id;
 
 	
@@ -117,9 +124,10 @@ public:
     bool model_regression_flag;
 
 	// time object
-
 	ros::Time check_pnt;
-	ros::Duration check_duration;
+	ros::Time init_time;
+    ros::Duration check_duration;
+
 
     // tracker name
     std::string tracker_name;

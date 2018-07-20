@@ -3,22 +3,22 @@
 <!--view path solver test-->
 <node name="view_points_solver" pkg="asap" type="asap_path_solver" output="screen" launch-prefix="xterm -e gdb --args">
 	<param name="world_frame_id" value="/world" type="str"/> 
-	<param name="tracking_d_min" value="2" type="double"/>
-	<param name="tracking_d_max" value="2.5" type="double"/>
+	<param name="tracking_d_min" value="1.3" type="double"/>
+	<param name="tracking_d_max" value="2.0" type="double"/>
 	<param name="tracking_d_N" value="3" type="int"/>
 	<param name="elev_min" value="$(eval 3.141592/8)" type="double"/>
 	<param name="elev_max" value="$(eval 3.141592/4)" type="double"/>
 	<param name="N_azim" value="20" type="int"/> <!--default: 20-->
-	<param name="N_elev" value="6" type="int"/> <!--default: 12-->
+	<param name="N_elev" value="4" type="int"/> <!--default: 12-->
 	<param name="local_range" value="1" type="int"/> <!--default: 1-->
 	<param name="N_extrema" value="12" type="int"/> <!--default: 8-->
 	<!--Note: when connecting the tracker and the first layer, we relieve this distance`-->
-	<param name="max_interval_distance" value="1.5" type="double"/>
-	<param name="w_v0" value="10.0" type="double"/>
+	<param name="max_interval_distance" value="1.0" type="double"/>
+	<param name="w_v0" value="4.0" type="double"/>
 	<param name="tracker_name" value="firefly" type="str"/>
 	<param name="target_name" value="target" type="str"/>
 	<param name="N_history" value="8" type="int"/>
 	<param name="N_prediction" value="4" type="int"/>
-	<param name="t_prediction" value="4" type="double"/>
+	<param name="t_prediction" value="3" type="double"/>
 </node>
 </launch>

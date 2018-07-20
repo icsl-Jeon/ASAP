@@ -76,40 +76,37 @@ IDX maxElem(const MatrixXd& mat){
 }
 
 
+
 // this function finds numExt many extrema(local max) in matrix
 vector<IDX> localMaxima(const MatrixXd& mat,int numExt,int range){
 
-    if (!mat.isZero(0)) {
-        vector<IDX> local_extrema;
+    vector<IDX> local_extrema;
 
 
-        MatrixXd temp_mat = mat.replicate(1, 1);
-        int num_row = mat.rows();
-        int num_col = mat.cols();
+    MatrixXd temp_mat = mat.replicate(1, 1);
+    int num_row = mat.rows();
+    int num_col = mat.cols();
 
-        for (int k = 0; k < numExt; k++) {
+    for (int k = 0; k < numExt; k++) {
 
-            IDX max_idx = maxElem(temp_mat);
-            // save this extrema
-            local_extrema.push_back(max_idx);
+        IDX max_idx = maxElem(temp_mat);
+        // save this extrema
+        local_extrema.push_back(max_idx);
 
-            // we make element in the window zeros
-            int row_min = std::max(max_idx[0] - range, 0);
-            int row_max = std::min(max_idx[0] + range, num_row - 1);
+        // we make element in the window zeros
+        int row_min = std::max(max_idx[0] - range, 0);
+        int row_max = std::min(max_idx[0] + range, num_row - 1);
 
-            int col_min = std::max(max_idx[1] - range, 0);
-            int col_max = std::min(max_idx[1] + range, num_col - 1);
+        int col_min = std::max(max_idx[1] - range, 0);
+        int col_max = std::min(max_idx[1] + range, num_col - 1);
 
-            //iterate through the window and set zeros
-            for (int r = row_min; r <= row_max; r++)
-                for (int c = col_min; c <= col_max; c++)
-                    temp_mat.coeffRef(r, c) = 0;
-        }
-
-        return local_extrema;
+        //iterate through the window and set zeros
+        for (int r = row_min; r <= row_max; r++)
+            for (int c = col_min; c <= col_max; c++)
+                temp_mat.coeffRef(r, c) = 0;
     }
-    else // if all ray wasn't hit
-        return equal_dist_idx_set(mat.rows(),mat.cols(),numExt);
+
+    return local_extrema;
 
 }
 
@@ -128,9 +125,6 @@ LinearModel linear_regression(const Eigen::VectorXd& ts,const Eigen::VectorXd& x
     model.beta0=beta0;
     model.beta1=beta1;
     return model;
-
-
-
 }
 
 double model_eval(const LinearModel& model,double t){
@@ -138,17 +132,61 @@ double model_eval(const LinearModel& model,double t){
 }
 
 
-vector<IDX> equal_dist_idx_set(int row,int col,int N_extrema){
+double interpolate( vector<double> &xData, vector<double> &yData, double x, bool extrapolate )
+{
+    int size = xData.size();
 
-    int y_dist=ceil(sqrt(float(row)/float(col)*N_extrema));
-    int x_dist=ceil(sqrt(float(row)/float(col)*N_extrema));
+    int i = 0;                                                                  // find left end of interval for interpolation
+    if ( x >= xData[size - 2] )                                                 // special case: beyond right end
+    {
+        i = size - 2;
+    }
+    else
+    {
+        while ( x > xData[i+1] ) i++;
+    }
+    double xL = xData[i], yL = yData[i], xR = xData[i+1], yR = yData[i+1];      // points on either side (unless beyond ends)
+    if ( !extrapolate )                                                         // if beyond ends of array and not extrapolating
+    {
+        if ( x < xL ) yR = yL;
+        if ( x > xR ) yL = yR;
+    }
+
+    double dydx = ( yR - yL ) / ( xR - xL );                                    // gradient
+
+    return yL + dydx * ( x - xL );                                              // linear interpolation
+}
+
+
+void path2vec(const nav_msgs::Path& path,std::vector<double> &xs,std::vector<double> &ys,std::vector<double> &zs){
+
+    unsigned long path_len=path.poses.size();
+
+    xs.resize(path_len);
+    ys.resize(path_len);
+    zs.resize(path_len);
+
+    for (int i=0;i<path_len;i++){
+        xs[i]=path.poses[i].pose.position.x;
+        ys[i]=path.poses[i].pose.position.y;
+        zs[i]=path.poses[i].pose.position.z;
+    }
+
+
+};
+
+
+vector<IDX> equal_dist_idx_set(int row,int col,int row_sample,int col_sample){
+//
+//    int y_dist=ceil(sqrt(float(row)/float(col)*N_extrema));
+//    int x_dist=ceil(sqrt(float(row)/float(col)*N_extrema));
 
     VectorXf azim_vec,elev_vec;
 
-    azim_vec.setLinSpaced(x_dist+2,0,col-1);
-    elev_vec.setLinSpaced(y_dist+2,0,row-1);
+    azim_vec.setLinSpaced(col_sample+2,0,col-1);
+    elev_vec.setLinSpaced(row_sample+2,0,row-1);
 
-    VectorXi azim_veci(x_dist),elev_veci(y_dist);
+    VectorXi azim_veci(col_sample),elev_veci(row_sample);
 
     for(int i=1;i<=azim_vec.rows()-2;i++)
         azim_veci.coeffRef(i-1)=azim_vec.coeff(i);
@@ -158,8 +196,8 @@ vector<IDX> equal_dist_idx_set(int row,int col,int N_extrema){
 
     vector<IDX> idx_set;
 
-    for(int r=0;r<y_dist;r++)
-        for(int c=0;c<x_dist;c++) {
+    for(int r=0;r<row_sample;r++)
+        for(int c=0;c<col_sample;c++) {
             IDX idx;
             idx(0)=elev_veci.coeff(r);
             idx(1)=azim_veci.coeff(c);
