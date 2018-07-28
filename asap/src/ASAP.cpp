@@ -617,11 +617,6 @@ void ASAP::reactive_planning() {
 }
 
 
-void ASAP::asap_planning(){
-    target_regression();
-    target_future_prediction();
-    reactive_planning();
-}
 
 void ASAP::quad_waypoint_pub() {
 
