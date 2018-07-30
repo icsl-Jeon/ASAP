@@ -44,6 +44,8 @@ if(NO_ROS)
   message(STATUS "NO_ROS = true, not building waypoint publisher or hovering example, returning now.")
   return()
 endif()
+#CVXGEN 
+set(CVXGEN_DIR ~/Downloads/cvxgen)
 
 
 #OCTOMAP 
@@ -62,7 +64,7 @@ link_libraries(${OpenCV_LIBRARIES})
 #-------------------#
 
 
-find_package(catkin REQUIRED COMPONENTS gazebo_msgs geometry_msgs octomap_ros mav_msgs roscpp sensor_msgs octomap_msgs message_generation kiro_gui_msgs)
+find_package(catkin REQUIRED COMPONENTS gazebo_msgs geometry_msgs octomap_ros mav_msgs roscpp sensor_msgs octomap_msgs message_generation kiro_gui_msgs trajectory_msgs)
 
 add_service_files(
     FILES
@@ -95,12 +97,13 @@ catkin_package(
 ## Your package locations should be listed before other locations
 include_directories(
 include
- ${catkin_INCLUDE_DIRS}
+${catkin_INCLUDE_DIRS}
+${CVXGEN_DIR}
 )
 
 
-add_executable(asap_path_solver src/solve_path_test.cpp src/ASAP.cpp src/utils.cpp )
-target_link_libraries(asap_path_solver ${catkin_LIBRARIES} ${OpenCV_LIBRARIES})
+add_executable(asap_path_solver src/solve_path_test.cpp src/ASAP.cpp src/utils.cpp src/PolyTrajGen.cpp ${CVXGEN_DIR}/solver.c ${CVXGEN_DIR}/ldl.c ${CVXGEN_DIR}/matrix_support.c ${CVXGEN_DIR}/util.c)
+target_link_libraries(asap_path_solver ${catkin_LIBRARIES} ${OpenCV_LIBRARIES} m)
 add_dependencies(asap_path_solver ${catkin_EXPORTED_TARGETS})
 
 ## Declare a C++ library

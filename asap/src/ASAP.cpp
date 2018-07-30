@@ -8,8 +8,7 @@
 using namespace asap_ns;
 
 // constructor
-
-ASAP::ASAP(Params params):nh("~"){
+ASAP::ASAP(asap_ns::Params params):nh("~"){
     // parameter parsing
     this->params=params;
     // stack of target position history
@@ -29,6 +28,13 @@ ASAP::ASAP(Params params):nh("~"){
     std::cout<<"world frame id:"<<world_frame_id<<std::endl;
     target_prediction.header.frame_id=world_frame_id;
 
+    // name
+
+    target_name=params.target_name;
+    tracker_name=params.tracker_name;
+
+    std::cout<<"inserted tracker name: "<<tracker_name<<std::endl;
+
     quad_waypoint.header.frame_id=world_frame_id;
 
     // subscribe
@@ -36,17 +42,20 @@ ASAP::ASAP(Params params):nh("~"){
     states_sub=nh.subscribe("/gazebo/model_states",10,&ASAP::state_callback,this);
     points_sub=nh.subscribe("/search_position_array",10,&ASAP::points_callback,this);
 
-
     // advertise
     path_pub=nh.advertise<nav_msgs::Path>("view_sequence",3);
     target_pred_path_pub=nh.advertise<nav_msgs::Path>("target_prediction_path",2);
     pnts_pub=nh.advertise<visualization_msgs::Marker>("clicked_pnts",2);
     candidNodes_marker_pub=nh.advertise<visualization_msgs::Marker>("candidate_nodes",2);
+    skeleton_pub=nh.advertise<visualization_msgs::Marker>("skeleton",2);
     node_pub=nh.advertise<visualization_msgs::Marker>("nodes_in_layer",2);
     edge_pub=nh.advertise<visualization_msgs::MarkerArray>("edge_in_layer",2);
     BBMarker_pub=nh.advertise<visualization_msgs::Marker>("bounding_box_target",2);
+    smooth_path_pub=nh.advertise<nav_msgs::Path>("smooth_path",2);
+    traj_pub=nh.advertise<trajectory_msgs::MultiDOFJointTrajectory>("/"+tracker_name+"/"+mav_msgs::default_topics::COMMAND_TRAJECTORY, 10);
 
-	// bgr colormap setting
+
+    // bgr colormap setting
     cv::Mat cvVec(1,params.N_pred,CV_8UC1);
     cv::Mat colorVec;
     for(int i=0;i<params.N_pred;i++)
@@ -73,6 +82,13 @@ ASAP::ASAP(Params params):nh("~"){
     marker.scale.z = scale;
     marker.color.r = 1;
     marker.color.a = 0.5;
+
+    // skeleton marker
+    float skeleton_scale=0.2;
+    skeleton_pnt_marker=marker;
+    skeleton_pnt_marker.ns="skeleton";
+    skeleton_pnt_marker.scale.x=skeleton_pnt_marker.scale.y=skeleton_pnt_marker.scale.z=skeleton_scale;
+
 
     // pnts marker init
     pnt_marker.header.frame_id = world_frame_id;
@@ -105,9 +121,7 @@ ASAP::ASAP(Params params):nh("~"){
     node_marker.color.a = 0.8;
 	node_marker.lifetime=ros::Duration(duration);
 
-
     // edge marker init
-
 	edge_id=0;
 	edge_marker.header.frame_id = world_frame_id;
     edge_marker.header.stamp  = ros::Time::now();
@@ -167,7 +181,7 @@ void ASAP::hovering(ros::Duration dur,double hovering_z){
 		ROS_INFO_ONCE("hovering during %f [sec]",dur.toSec());
 	    Eigen::Vector3d waypoint(0, 0,hovering_z);
 		mav_msgs::msgMultiDofJointTrajectoryFromPositionYaw(waypoint,0, &quad_waypoint);
-   		
+
 		while (ros::Time::now().toSec()-hovering_start<dur.toSec())
         traj_pub.publish(quad_waypoint);
 	
@@ -205,7 +219,7 @@ MatrixXd ASAP::castRay(geometry_msgs::Point rayStartPnt, float ray_length,bool v
     // castRay w.r.t sampling azimuth and elevation
 
     if (octree_obj->size()) {
-        printf("casting started with light distance %.4f\n",ray_length);
+//        printf("casting started with light distance %.4f\n",ray_length);
 
         bool ignoreUnknownCells =true;
         octomap::point3d light_start(float(rayStartPnt.x),float(rayStartPnt.y),float(rayStartPnt.z));
@@ -243,7 +257,7 @@ MatrixXd ASAP::castRay(geometry_msgs::Point rayStartPnt, float ray_length,bool v
 
 Layer ASAP::get_layer(geometry_msgs::Point light_source,int t_idx){
 
-    Params & param=this->params;
+    asap_ns::Params & param=this->params;
     int local_key=0;
     bool isFree;
     Layer layer;
@@ -453,10 +467,20 @@ void ASAP::graph_wrapping() {
     cur_layer_set.push_back(finishing_layer);
 }
 
+
+
 void ASAP::solve_view_path() {
     // find path using and save the Path into member functions
+
+    auto t0 = std::chrono::high_resolution_clock::now();
     GraphPath graphPath=Dijkstra(g,descriptor_map["x0"],descriptor_map["xf"]);
- 	
+    auto t1 = std::chrono::high_resolution_clock::now();
+    auto dt = 1.e-9*std::chrono::duration_cast<std::chrono::nanoseconds>(t1-t0).count();
+
+
+    std::cout<<"Dijkstra solving time: "<<dt<<std::endl;
+
+
 //	printf("--------------Path solve----------------------");
 
     this->view_path=nav_msgs::Path();
@@ -546,17 +570,25 @@ void ASAP::target_future_prediction() {
         VectorXd pred_seq(params.N_pred);
         planning_horizon.clear();
         pred_seq.setLinSpaced(params.N_pred, ros::Time::now().toSec(), ros::Time::now().toSec() + params.t_pred);
+
         target_prediction = TargetPrediction();
         target_prediction.header.frame_id = world_frame_id;
         double t;
-        for (int idx = 0; idx < params.N_pred; idx++) {
+
+
+        // this is planning horizon at predicting the future path of target
+		for(int insert_idx=0;insert_idx<pred_seq.size();insert_idx++)
+			planning_horizon.push_back(pred_seq.coeff(insert_idx));
+
+		
+		// why start from 1:  0 is not future value.
+        for (int idx = 1; idx < params.N_pred; idx++) {
             t = pred_seq.coeff(idx);
             geometry_msgs::PoseStamped poseStamped;
             poseStamped.pose.position.x = model_eval(regress_model[0], t);
             poseStamped.pose.position.y = model_eval(regress_model[1], t);
             poseStamped.pose.position.z = model_eval(regress_model[2], t);
             target_prediction.poses.push_back(poseStamped);
-            planning_horizon.push_back(t);
         }
 
     }
@@ -611,25 +643,50 @@ void ASAP::reactive_planning() {
 
 
     solve_view_path();
+}
 
 
+void ASAP::smooth_path_update() {
+
+    // map std::vector to VectorXd for time series
+    TrajGen::TimeSeries ts=Map<VectorXd>(planning_horizon_saved.data(),planning_horizon_saved.size());
+
+
+	// check if timevector is correctly stored
+	//std::cout<<ts.transpose()<<std::endl;
+    // construct waypoints
+
+    double w_j=params.w_j;
+    this->splineXYZ = TrajGen::min_jerk_soft(ts,view_path,cur_tracker_vel,w_j);
 
 }
 
 
-
 void ASAP::quad_waypoint_pub() {
 
+    // smooth path following
+    if(view_path.poses.size()) {
+        geometry_msgs::Point following_point=TrajGen::point_eval_spline(this->splineXYZ,ros::Time::now().toSec());
+
+        Eigen::Vector3d waypoint(following_point.x,following_point.y, following_point.z);
+        double yaw = atan2(cur_tracker_pos.y - cur_target_pos.y, cur_tracker_pos.x - cur_target_pos.x) + PI;
+
+        quad_waypoint.header.stamp = ros::Time::now();
+        mav_msgs::msgMultiDofJointTrajectoryFromPositionYaw(waypoint, yaw, &quad_waypoint);
+       traj_pub.publish(quad_waypoint);
+    }
 
 
+	/**
+    // skeleton path following
     if(view_path.poses.size()) {
         double now = ros::Time::now().toSec();
 
 
-        std::cout<<"now: "<<now<<" planning time horizon: [";
-        for(auto it=planning_horizon_saved.begin(),end=planning_horizon_saved.end();it!=end;it++)
-            std::cout<<*it<<" ";
-        std::cout<<"]"<<std::endl;
+//        std::cout<<"now: "<<now<<" planning time horizon: [";
+//        for(auto it=planning_horizon_saved.begin(),end=planning_horizon_saved.end();it!=end;it++)
+//            std::cout<<*it<<" ";
+//        std::cout<<"]"<<std::endl;
 
 
         std::vector<double> xs, ys, zs;
@@ -647,8 +704,9 @@ void ASAP::quad_waypoint_pub() {
         mav_msgs::msgMultiDofJointTrajectoryFromPositionYaw(waypoint, yaw, &quad_waypoint);
 
         traj_pub.publish(quad_waypoint);
-
     }
+	**/
+
 }
 
 void ASAP::state_callback(const gazebo_msgs::ModelStates::ConstPtr& gazebo_msg) {
@@ -804,6 +862,7 @@ void ASAP::octomap_callback(const octomap_msgs::Octomap & msg) {
 
 }
 
+
 void ASAP::marker_publish() {
 
 //    // marker construction
@@ -834,13 +893,26 @@ void ASAP::points_publish() {
 
     // marker publish
     pnts_pub.publish(pnt_marker);
+
+
+    // skeleton publish
+
+    skeleton_pnt_marker.points.clear();
+
+    for (auto it = view_path.poses.begin(),end=view_path.poses.end();it != end;it++)
+        skeleton_pnt_marker.points.push_back(it->pose.position);
+
+    skeleton_pub.publish(skeleton_pnt_marker);
+
 }
 
 void ASAP::path_publish() {
 
     path_pub.publish(view_path);
     target_pred_path_pub.publish(target_prediction);
-
+    nav_msgs::Path smooth_path_viz=TrajGen::horizon_eval_spline(splineXYZ,4);
+    smooth_path_viz.header.frame_id=world_frame_id;
+    smooth_path_pub.publish(smooth_path_viz);
 }
 
 

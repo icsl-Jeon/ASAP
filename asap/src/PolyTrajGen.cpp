@@ -10,7 +10,10 @@
 #include <vector>
 #include "PolyTrajGen.h"
 #include <cmath>
+#include <geometry_msgs/Twist.h>
 
+
+extern Params params;
 
 using namespace Eigen;
 using namespace std;
@@ -21,7 +24,6 @@ void CVXGEN::construct_qp(Params &params, MatrixXd & Q, MatrixXd & H, MatrixXd &
 
     int n_var=Q.rows();
     int n_constraint=Aeq.rows();
-
 
     if (n_var*n_var==324)
         for(int r=0;r<n_var;r++) {
@@ -59,8 +61,10 @@ TrajGen::PolySpline CVXGEN::get_solution(Vars & var,  int poly_order, int n_seg 
 }
 
 
-TrajGen::PolySplineXYZ TrajGen::min_jerk_soft(const TrajGen::TimeSeries& ts,const nav_msgs::Path& pathPtr,const geometry_msgs::Point & pointPtr,Weight w_j) {
 
+
+TrajGen::PolySplineXYZ TrajGen::min_jerk_soft(const TimeSeries & ts, const nav_msgs::Path & pathPtr, const geometry_msgs::Twist &pointPtr,
+                                              Weight w_j) {
     /*
      * len(ts)=len(path)
      */
@@ -126,9 +130,9 @@ TrajGen::PolySplineXYZ TrajGen::min_jerk_soft(const TrajGen::TimeSeries& ts,cons
     beqy.coeffRef(0,0)=pathPtr.poses[0].pose.position.y;
     beqz.coeffRef(0,0)=pathPtr.poses[0].pose.position.z;
 
-    beqx.coeffRef(1,0)=pointPtr.x;
-    beqy.coeffRef(1,0)=pointPtr.y;
-    beqz.coeffRef(1,0)=pointPtr.z;
+    beqx.coeffRef(1,0)=pointPtr.linear.x;
+    beqy.coeffRef(1,0)=pointPtr.linear.y;
+    beqz.coeffRef(1,0)=pointPtr.linear.z;
 
     // 0th order continuity
     int row_insert_idx=2; int col_insert_idx1=0; int col_insert_idx2=col_insert_idx1+blck_size;
@@ -194,44 +198,50 @@ TrajGen::PolySplineXYZ TrajGen::min_jerk_soft(const TrajGen::TimeSeries& ts,cons
 
 //    std::cout<<Q<<std::endl;
 
-    std::cout<<"[CVXGEN] solution: "<<std::endl;
+   // std::cout<<"[CVXGEN] solution: "<<std::endl;
 
     // solve for x
     CVXGEN::construct_qp(params,Q,H_wpnt_x,Aeq,beqx);
     auto t0 = std::chrono::high_resolution_clock::now();
     solve();
     PolySpline spline_x=CVXGEN::get_solution(vars,poly_order,n_seg);
-    std::cout<<"px: ";
+   /**
+   std::cout<<"px: ";
     for(int n=0;n<n_seg;n++)
         std::cout<<spline_x.spline[n].transpose()<<" ";
 
     std::cout<<std::endl;
-
+	**/
 
     // solve for y
     CVXGEN::construct_qp(params,Q,H_wpnt_y,Aeq,beqy);
     solve();
     PolySpline spline_y=CVXGEN::get_solution(vars,poly_order,n_seg);
-    std::cout<<"py: ";
+    
+	/**
+	std::cout<<"py: ";
     for(int n=0;n<n_seg;n++)
         std::cout<<spline_y.spline[n].transpose()<<" ";
     std::cout<<std::endl;
 
-
-    // solve for z
+	**/
+    
+	// solve for z
     CVXGEN::construct_qp(params,Q,H_wpnt_z,Aeq,beqz);
     solve();
     PolySpline spline_z=CVXGEN::get_solution(vars,poly_order,n_seg);
-    std::cout<<"pz: ";
+    
+	/**
+	std::cout<<"pz: ";
     for(int n=0;n<n_seg;n++)
         std::cout<<spline_z.spline[n].transpose()<<" ";
     std::cout<<std::endl;
-
+	**/
 
 
     auto t1 = std::chrono::high_resolution_clock::now();
     auto dt = 1.e-9*std::chrono::duration_cast<std::chrono::nanoseconds>(t1-t0).count();
-    std::cout<<"[CVXGEN] elapsed time: "<<dt<<std::endl;
+//    std::cout<<"[CVXGEN] elapsed time: "<<dt<<std::endl;
 
     TrajGen::PolySplineXYZ splineXYZ;
 
@@ -275,6 +285,27 @@ nav_msgs::Path TrajGen::horizon_eval_spline(const PolySplineXYZ& spline , int N_
     }
 
     return path;
+}
+
+
+geometry_msgs::Point TrajGen::point_eval_spline(const TrajGen::PolySplineXYZ & spline, TrajGen::Time t_eval) {
+
+
+    geometry_msgs::Point eval_point;
+
+    int poly_order=spline.pxs.poly_order;
+
+    Eigen::Index spline_idx=TrajGen::find_spline_interval(spline.checkpnts,t_eval);
+
+	if(spline_idx==-1){
+		ROS_ERROR_ONCE("could not get the spline of t_eval: please exit "); 
+	}
+	else{
+    eval_point.x=t_vec(poly_order,t_eval-spline.checkpnts[spline_idx],0).transpose()*spline.pxs.spline[spline_idx];
+    eval_point.y=t_vec(poly_order,t_eval-spline.checkpnts[spline_idx],0).transpose()*spline.pys.spline[spline_idx];
+    eval_point.z=t_vec(poly_order,t_eval-spline.checkpnts[spline_idx],0).transpose()*spline.pzs.spline[spline_idx];
+	}
+    return eval_point;
 }
 
 
@@ -326,6 +357,20 @@ VectorXd TrajGen::t_vec(PolyOrder poly_order, Time t, N_diff n_diff) {
     }
 
     return vec;
+}
+
+
+Eigen::Index TrajGen::find_spline_interval(const TimeSeries& ts,TrajGen::Time t_eval) {
+
+    Eigen::Index idx=-1;
+
+    for(int i=0;i<ts.size()-1;i++)
+        if(ts.coeff(i)<=t_eval && ts.coeff(i+1)>t_eval)
+            idx=i;
+
+    return idx;
+
+    // if idx == -1, then could not find
 }
 
 

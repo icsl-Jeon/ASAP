@@ -6,8 +6,9 @@
 #define ASAP_ASAP_H
 
 // CUSTOM HEADERS
-#include "utils.h"
 
+
+#include "utils.h"
 
 class ASAP{
 
@@ -36,16 +37,19 @@ private:
      * Planning
      */
 
+    // polyspline
+    TrajGen::PolySplineXYZ splineXYZ;
+
     // corresponding time vector
-    std::vector<double> planning_horizon;
+    std::vector<double> planning_horizon; // NOTE : first component is ros::Time::now(). Thus, actual future step is remainders
     std::vector<double> planning_horizon_saved;
     // sequnce of viewpoints
     ViewSequence view_path;
     // octomap object
     std::shared_ptr<octomap::OcTree> octree_obj;
-    // current position of tracker
-    geometry_msgs::Point cur_tracker_pos;
-    geometry_msgs::Point cur_target_pos;
+
+
+
 
     /****
      * Graph
@@ -73,11 +77,17 @@ public:
      * Member variables
      */
 
+    // velocity
+    geometry_msgs::Twist cur_tracker_vel;
+
+    // current position of tracker
+    geometry_msgs::Point cur_tracker_pos;
+    geometry_msgs::Point cur_target_pos;
+
     // flags
     bool state_callback_flag;
     bool octomap_callback_flag;
     bool model_regression_flag;
-
 
     // ROS
     ros::NodeHandle nh; // getting parameters
@@ -85,10 +95,13 @@ public:
     ros::Subscriber octomap_sub;
     ros::Subscriber states_sub;
     ros::Subscriber points_sub;
+    ros::Subscriber odometry_sub;
 
     ros::Publisher candidNodes_marker_pub; // points of local maximum in visibility matrix
-    ros::Publisher pnts_pub; // points (clicked points)
+    ros::Publisher pnts_pub; // points (target prediction points)
+    ros::Publisher skeleton_pub; // skeleton solved from view_path_solver
     ros::Publisher path_pub; // view path
+    ros::Publisher smooth_path_pub; // smooth path publisher
     ros::Publisher target_pred_path_pub; // predicted target future history
     ros::Publisher node_pub; // node marker publisher
     ros::Publisher edge_pub; // edge arrow publisher
@@ -96,13 +109,13 @@ public:
     ros::Publisher BBMarker_pub; // bounding box publisher
 
     ros::ServiceServer solve_server; // server for solving view path
-
     // id
     std::string world_frame_id; // default: "world"
 
     // rviz
     visualization_msgs::Marker marker; // marker for candidate nodes
     visualization_msgs::Marker pnt_marker; // marker for pnts
+    visualization_msgs::Marker skeleton_pnt_marker; // marker for pnts
     visualization_msgs::Marker node_marker; // marker for nodes
     visualization_msgs::Marker edge_marker; // marker for edges
     visualization_msgs::MarkerArray arrow_array; // array of arrow
@@ -147,6 +160,8 @@ public:
     void target_regression(); // regression on history
     void target_future_prediction(); // update target future trajectory
     void reactive_planning(); // graph construction + solve path altogether
+    void smooth_path_update(); // spline curve saving
+
 
 
     // publish
@@ -160,9 +175,6 @@ public:
     void state_callback(const gazebo_msgs::ModelStates::ConstPtr&);
     bool solve_callback(asap::SolvePath::Request&,asap::SolvePath::Response&); // service callback
     void octomap_callback(const octomap_msgs::Octomap&);
-
-
-
 };
 
 

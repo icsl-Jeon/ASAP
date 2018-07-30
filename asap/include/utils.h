@@ -23,11 +23,13 @@
 // ROS
 #include <ros/ros.h>
 #include <geometry_msgs/Point.h>
+#include <geometry_msgs/Twist.h>
 #include <geometry_msgs/Vector3.h>
 #include <geometry_msgs/Quaternion.h>
 #include <geometry_msgs/Transform.h>
 #include <gazebo_msgs/ModelStates.h>
 #include <nav_msgs/Path.h>
+#include <nav_msgs/Odometry.h>
 #include <trajectory_msgs/MultiDOFJointTrajectory.h>
 #include <tf/transform_datatypes.h>
 #include <visualization_msgs/Marker.h>
@@ -59,7 +61,11 @@
 #include <octomap/OcTreeBase.h>
 #include <octomap/octomap_types.h>
 #include <octomap_msgs/conversions.h>
-#include <octomap_msgs/Octomap.h>
+
+
+// POLY_TARJ_GEN
+#include "PolyTrajGen.h"
+
 
 using namespace std;
 using namespace Eigen;
@@ -84,6 +90,7 @@ namespace asap_ns {
         vector<float> tracking_ds; // set of tracking distances ! caution::increasing order
         float max_interval_distance; // allowable interval distance of two nodes
         float w_v0; // visibility weight
+        float w_j; // weight for jerk minimization. smaller value -> waypoint
         float alpha; // time varying weight factor w_v0*alpha*t_idx or w_v0*alpha^t_idx
         // like linspace
         void set_ds(float start,float end,int N){
@@ -96,6 +103,9 @@ namespace asap_ns {
         int N_history; // number of stacked history
         int N_pred; // number of prediction
         int t_pred; // prediction horizion [sec]
+        string tracker_name; // tracker name
+        string target_name; // target name
+
     };
 
 // candidate node of a layer

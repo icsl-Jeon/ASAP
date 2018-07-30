@@ -9,6 +9,7 @@
 #include <Eigen/SparseCore>
 #include <ros/ros.h>
 #include <geometry_msgs/Point.h>
+#include <geometry_msgs/Twist.h>
 #include <nav_msgs/Path.h>
 #include <vector>
 #include <iostream>
@@ -37,6 +38,7 @@ namespace TrajGen {
         vector<PolyCoeff> spline;
     };
 
+
     struct PolySplineXYZ {
         PolySplineXYZ() {};
         PolySpline pxs;
@@ -46,14 +48,16 @@ namespace TrajGen {
     };
 
     // jerk minimization with waypoint cost ( not hard constraint )
-    PolySplineXYZ min_jerk_soft(const TimeSeries&,const nav_msgs::Path&,const geometry_msgs::Point&,Weight);
+    PolySplineXYZ min_jerk_soft(const TimeSeries&,const nav_msgs::Path&,const geometry_msgs::Twist&,Weight);
     // evaluation of spline_path with given number of interval points : for the purpose of vizualization
     nav_msgs::Path horizon_eval_spline(const PolySplineXYZ &,int);
     // for actual travel, this function will be used
-    geometry_msgs::Point point_eval_spline(const PolySplineXYZ &,double);
+    geometry_msgs::Point point_eval_spline(const PolySplineXYZ &, TrajGen::Time);
 
 
-    /*
+
+    /*TrajGen::
+
      * p(t)=t_vec(n_order,t,0)'p=p't_vec(n_order,t,0)
      * dot{p(t)}=t_vec(n_order,t,1)'p=p't_vec(n_order,t,1)
      * ...
@@ -71,7 +75,8 @@ namespace TrajGen {
     MatrixXd integral_jerk_squared(PolyOrder);
 
 
-
+    // find belonging time interval in time series
+    Index find_spline_interval(const TimeSeries&,Time);
 }
 
 
