@@ -57,6 +57,7 @@ private:
     // graph for VP computation
     Graph g;
     // set of layers of candidate nodes
+    geometry_msgs::Point graph_init_point;
     asap_ns::LayerSet cur_layer_set;
 
     // dictionary for vertex descriptor
@@ -105,6 +106,7 @@ public:
     ros::Publisher target_pred_path_pub; // predicted target future history
     ros::Publisher node_pub; // node marker publisher
     ros::Publisher edge_pub; // edge arrow publisher
+    ros::Publisher waypoint_viz_pub; // waypoint marker publisher
     ros::Publisher traj_pub; // trajectory publisher
     ros::Publisher BBMarker_pub; // bounding box publisher
 
@@ -115,6 +117,8 @@ public:
     // rviz
     visualization_msgs::Marker marker; // marker for candidate nodes
     visualization_msgs::Marker pnt_marker; // marker for pnts
+    visualization_msgs::Marker waypoint_marker; // marker for quad waypoint
+    visualization_msgs::Marker velocity_marker; // marker for velocity of tracker
     visualization_msgs::Marker skeleton_pnt_marker; // marker for pnts
     visualization_msgs::Marker node_marker; // marker for nodes
     visualization_msgs::Marker edge_marker; // marker for edges

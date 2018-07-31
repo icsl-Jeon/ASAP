@@ -263,7 +263,7 @@ GraphPath Dijkstra(Graph g,Vertex v0,Vertex vf){
         for(PathType::reverse_iterator pathIterator = path.rbegin(); pathIterator != path.rend(); ++pathIterator)
         {
 
-            ROS_INFO("path insertion");
+//            ROS_INFO("path insertion");
             vertex_path1.push_back(nameMap[boost::source(*pathIterator, g)]);
             vertex_path2.push_back(nameMap[boost::target(*pathIterator, g)]);
 

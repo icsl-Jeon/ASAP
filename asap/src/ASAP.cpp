@@ -48,6 +48,7 @@ ASAP::ASAP(asap_ns::Params params):nh("~"){
     pnts_pub=nh.advertise<visualization_msgs::Marker>("clicked_pnts",2);
     candidNodes_marker_pub=nh.advertise<visualization_msgs::Marker>("candidate_nodes",2);
     skeleton_pub=nh.advertise<visualization_msgs::Marker>("skeleton",2);
+    waypoint_viz_pub=nh.advertise<visualization_msgs::Marker>("current_waypoint",2);
     node_pub=nh.advertise<visualization_msgs::Marker>("nodes_in_layer",2);
     edge_pub=nh.advertise<visualization_msgs::MarkerArray>("edge_in_layer",2);
     BBMarker_pub=nh.advertise<visualization_msgs::Marker>("bounding_box_target",2);
@@ -84,10 +85,20 @@ ASAP::ASAP(asap_ns::Params params):nh("~"){
     marker.color.a = 0.5;
 
     // skeleton marker
-    float skeleton_scale=0.2;
+    float skeleton_scale=0.1;
     skeleton_pnt_marker=marker;
     skeleton_pnt_marker.ns="skeleton";
     skeleton_pnt_marker.scale.x=skeleton_pnt_marker.scale.y=skeleton_pnt_marker.scale.z=skeleton_scale;
+    skeleton_pnt_marker.color.r=0; skeleton_pnt_marker.color.g=1; skeleton_pnt_marker.color.b=0;
+
+
+    // waypoint marker
+    waypoint_marker=marker;
+    waypoint_marker.ns="current_waypoint";
+    waypoint_marker.type=visualization_msgs::Marker::SPHERE;
+    waypoint_marker.color.r=1; waypoint_marker.color.g=0; waypoint_marker.color.b=0;
+
+
 
 
     // pnts marker init
@@ -138,7 +149,6 @@ ASAP::ASAP(asap_ns::Params params):nh("~"){
     edge_marker.color.r = 0;
     edge_marker.color.a = 0.5;
     edge_marker.lifetime=ros::Duration(duration);
-
 
 
 
@@ -197,7 +207,15 @@ void ASAP::graph_init() {
     descriptor_map.insert(make_pair("x0",x0));
 
     Layer base_layer;
-    base_layer.nodes.push_back(CandidNode("x0",cur_tracker_pos,-1));
+
+    // current tracker position does not work unless the perfomance of controller is great
+
+    if(this->splineXYZ.checkpnts.size())
+        graph_init_point=TrajGen::point_eval_spline(this->splineXYZ,ros::Time::now().toSec());
+    else
+        graph_init_point=cur_tracker_pos;
+
+    base_layer.nodes.push_back(CandidNode("x0",graph_init_point,-1));
     base_layer.t_idx=0; // initial index t0
     cur_layer_set.push_back(base_layer);
 
@@ -351,7 +369,8 @@ void ASAP::add_layer(Layer layer) {
 
 
             // problem may occur
-            octomap::point3d P1((cur_tracker_pos.x), cur_tracker_pos.y, cur_tracker_pos.z);
+
+            octomap::point3d P1((graph_init_point.x), graph_init_point.y, graph_init_point.z);
             octomap::point3d P2(it->position.x, it->position.y, it->position.z);
 
             node_marker.points.push_back(it->position);
@@ -380,7 +399,7 @@ void ASAP::add_layer(Layer layer) {
             if (dist <5){
                 boost::add_edge(descriptor_map["x0"], v, w, g);
                 edge_marker.points.clear();
-                edge_marker.points.push_back(cur_tracker_pos);
+                edge_marker.points.push_back(graph_init_point);
                 edge_marker.points.push_back(it->position);
                 edge_marker.id=edge_id++;
 				arrow_array.markers.push_back(visualization_msgs::Marker(edge_marker));
@@ -478,7 +497,7 @@ void ASAP::solve_view_path() {
     auto dt = 1.e-9*std::chrono::duration_cast<std::chrono::nanoseconds>(t1-t0).count();
 
 
-    std::cout<<"Dijkstra solving time: "<<dt<<std::endl;
+//    std::cout<<"Dijkstra solving time: "<<dt<<std::endl;
 
 
 //	printf("--------------Path solve----------------------");
@@ -495,7 +514,7 @@ void ASAP::solve_view_path() {
 
         if (id == "x0"){
             geometry_msgs::PoseStamped poseStamped;
-            poseStamped.pose.position=cur_tracker_pos;
+            poseStamped.pose.position=graph_init_point;
             view_path.poses.push_back(poseStamped);
 			std::cout<<std::endl;			
         }else if(id =="xf"){
@@ -649,7 +668,7 @@ void ASAP::reactive_planning() {
 void ASAP::smooth_path_update() {
 
     // map std::vector to VectorXd for time series
-    TrajGen::TimeSeries ts=Map<VectorXd>(planning_horizon_saved.data(),planning_horizon_saved.size());
+    TrajGen::TimeSeries ts=Map<VectorXd>(planning_horizon.data(),planning_horizon.size());
 
 
 	// check if timevector is correctly stored
@@ -666,10 +685,20 @@ void ASAP::quad_waypoint_pub() {
 
     // smooth path following
     if(view_path.poses.size()) {
+
+
+        ros::Time now=ros::Time::now();
+
+
         geometry_msgs::Point following_point=TrajGen::point_eval_spline(this->splineXYZ,ros::Time::now().toSec());
 
         Eigen::Vector3d waypoint(following_point.x,following_point.y, following_point.z);
         double yaw = atan2(cur_tracker_pos.y - cur_target_pos.y, cur_tracker_pos.x - cur_target_pos.x) + PI;
+
+
+        waypoint_marker.pose.position=following_point;
+        waypoint_viz_pub.publish(waypoint_marker);
+
 
         quad_waypoint.header.stamp = ros::Time::now();
         mav_msgs::msgMultiDofJointTrajectoryFromPositionYaw(waypoint, yaw, &quad_waypoint);
@@ -713,6 +742,7 @@ void ASAP::state_callback(const gazebo_msgs::ModelStates::ConstPtr& gazebo_msg) 
 
     std::vector<std::string> model_names=gazebo_msg->name;
     std::vector<geometry_msgs::Pose> pose_vector=gazebo_msg->pose;
+    std::vector<geometry_msgs::Twist> twist_vector=gazebo_msg->twist;
 
     long tracker_idx=std::find(model_names.begin(),model_names.end(),this->tracker_name)-model_names.begin();
     long target_idx=std::find(model_names.begin(),model_names.end(),this->target_name)-model_names.begin();
@@ -721,6 +751,7 @@ void ASAP::state_callback(const gazebo_msgs::ModelStates::ConstPtr& gazebo_msg) 
     //extract target state
     if (tracker_idx<model_names.size()) {
         cur_tracker_pos = pose_vector[tracker_idx].position;
+        cur_tracker_vel=twist_vector[tracker_idx];
         state_callback_flag = true;
     }
     else
@@ -730,6 +761,7 @@ void ASAP::state_callback(const gazebo_msgs::ModelStates::ConstPtr& gazebo_msg) 
     if (target_idx<model_names.size()) {
 
         cur_target_pos=pose_vector[target_idx].position;
+
 
 		// we insert every 20Hz for target 
 		

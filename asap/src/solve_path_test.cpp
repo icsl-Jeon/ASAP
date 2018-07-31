@@ -103,25 +103,6 @@ int main(int argc,char **argv){
             asap_obj.target_regression(); // get regression model from history
             asap_obj.target_future_prediction();
 
-            // let's measure velocity of tracker
-
-			ros::Time now=ros::Time::now();
-	        ros::Duration dt=now-time_ckp;
-           
-			asap_obj.cur_tracker_vel.linear.x=(asap_obj.cur_tracker_pos.x-tracker_position_ckp.x)/dt.toSec();
-            asap_obj.cur_tracker_vel.linear.y=(asap_obj.cur_tracker_pos.y-tracker_position_ckp.y)/dt.toSec();
-            asap_obj.cur_tracker_vel.linear.z=(asap_obj.cur_tracker_pos.z-tracker_position_ckp.z)/dt.toSec();
-
-
-            std::cout<<"velocity: [ "<<asap_obj.cur_tracker_vel.linear.x<<", "
-                                     <<asap_obj.cur_tracker_vel.linear.y<<", "
-                                     <<asap_obj.cur_tracker_vel.linear.z<<"]"<<std::endl;
-
-			time_ckp=now;
-			tracker_position_ckp.x=asap_obj.cur_tracker_pos.x;
-			tracker_position_ckp.y=asap_obj.cur_tracker_pos.y;
-			tracker_position_ckp.z=asap_obj.cur_tracker_pos.z;
-
 
             // planning once this condition is satisfied
             if(ros::Time::now().toSec()-planning_ckp.toSec()>solving_speed) {
