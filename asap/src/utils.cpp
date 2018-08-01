@@ -293,8 +293,11 @@ void mat_normalize(MatrixXd& mat){
 
 }
 
+bool compare_visibility(asap_ns::CandidNode node1,asap_ns::CandidNode node2){
 
+    return (node1.visibility<node2.visibility);
 
+}
 
 
 

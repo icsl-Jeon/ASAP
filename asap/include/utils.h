@@ -14,6 +14,7 @@
 #include <string>
 #include <map>
 #include <deque>
+#include <algorithm>
 
 
 // EIGEN
@@ -77,7 +78,7 @@ using namespace cv;
 
 #define PI 3.141592
 #define BB 2;
-
+const float FREE_VISIBILITY=99;
 /**
  * STRUCTURE
  */
@@ -89,6 +90,7 @@ namespace asap_ns {
         int N_node_per_layer;
         vector<float> tracking_ds; // set of tracking distances ! caution::increasing order
         float max_interval_distance; // allowable interval distance of two nodes
+        float max_interval_distance_init; // allowable interval distance of two nodes
         float w_v0; // visibility weight
         float w_j; // weight for jerk minimization. smaller value -> waypoint
         float alpha; // time varying weight factor w_v0*alpha*t_idx or w_v0*alpha^t_idx
@@ -229,14 +231,17 @@ vector<IDX> localMaxima(const MatrixXd&,int,int );
 GraphPath Dijkstra(Graph ,Vertex ,Vertex);
 void mat_normalize(MatrixXd&); // matrix normalization with maximum value
 vector<IDX> equal_dist_idx_set(int,int,int,int); // equal distribution when no cast is hit by obstacles
-// Linear regression
-LinearModel linear_regression(const Eigen::VectorXd& ,const Eigen::VectorXd& );
+// Linear regressionctorXd& ,const Eigen::VectorXd& );
 // evaluation with model
 double model_eval(const LinearModel &,double);
 // interpolation to get a waypoint
 double interpolate(std::vector<double> &,std::vector<double> &,double,bool);
 // extract xyz std::vector from nav_msgs
 void path2vec(const nav_msgs::Path&,std::vector<double> &,std::vector<double> &,std::vector<double> &);
+// linear regression
+LinearModel linear_regression(const Eigen::VectorXd& ,const Eigen::VectorXd& );
+// compare visibility
+bool compare_visibility(asap_ns::CandidNode,asap_ns::CandidNode);
 
 
 #endif //ASAP_UTILS_H

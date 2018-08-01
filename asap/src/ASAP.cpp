@@ -341,7 +341,7 @@ Layer ASAP::get_layer(geometry_msgs::Point light_source,int t_idx){
             if(!isFree)
                 candidNode.visibility=sdf(idx[0],idx[1]);
             else
-                candidNode.visibility=0.1;
+                candidNode.visibility=FREE_VISIBILITY;
             layer.nodes.push_back(candidNode);
             local_key++;
         }
@@ -367,6 +367,12 @@ void ASAP::add_layer(Layer layer) {
     // only base layer exits
     else if (cur_layer_set.size()==1) {
 //        ROS_INFO("current tracker position: [%f, %f, %f]\n",cur_tracker_pos.x,cur_tracker_pos.y,cur_tracker_pos.z);
+
+
+        vector<CandidNode>::iterator min_vis_node_it=std::min_element(layer.nodes.begin(),layer.nodes.end(),compare_visibility);
+
+        float min_vis=min_vis_node_it->visibility;
+
         for (vector<CandidNode>::iterator it = layer.nodes.begin(); it != layer.nodes.end(); it++) {
 
 
@@ -394,11 +400,20 @@ void ASAP::add_layer(Layer layer) {
 
             // connect edge
             float dist = P1.distance(P2);
+            float vis = it->visibility;
 
+            // heuristic to compare free element with those not be hit
+
+            if(vis==FREE_VISIBILITY)
+                vis=min_vis;
+
+
+//            std::cout<<"dist: "<<dist<<" ";
+//            std::cout<<"visibility: "<<vis<<" ";
             Weight w;
-            w=dist+params.w_v0*(layer.t_idx)/(it->visibility); // we assgin higher weight for later target position
-
-            if (dist <5){
+            w=dist+params.w_v0*(layer.t_idx)/vis; // we assgin higher weight for later target position
+//            std::cout<<"weight: "<<w<<std::endl;
+            if (dist <params.max_interval_distance_init){
                 boost::add_edge(descriptor_map["x0"], v, w, g);
                 edge_marker.points.clear();
                 edge_marker.points.push_back(graph_init_point);
@@ -707,7 +722,7 @@ void ASAP::smooth_path_update() {
 
 
 	// check if timevector is correctly stored
-	std::cout<<ros::Time::now()<<" in "<<ts.transpose()<<std::endl;
+//	std::cout<<ros::Time::now()<<" in "<<ts.transpose()<<std::endl;
 
     // construct waypoints
 
@@ -797,7 +812,7 @@ void ASAP::state_callback(const gazebo_msgs::ModelStates::ConstPtr& gazebo_msg) 
     if (target_idx<model_names.size()) {
 
         cur_target_pos=pose_vector[target_idx].position;
-        cur_target_pos.z+=0.5; // let's
+        cur_target_pos.z=0.5; // let's
 
         // accumulating prediction error
         if(model_regression_flag) {
@@ -890,14 +905,14 @@ bool ASAP::solve_callback(asap::SolvePath::Request& req,asap::SolvePath::Respons
         Vertex v = *vp.first;
         std::cout << index[v] <<  " ";
     }
-    std::cout << std::endl;
+//    std::cout << std::endl;
 
     std::cout << "edges(g) = ";
     boost::graph_traits<Graph>::edge_iterator ei, ei_end;
     for (boost::tie(ei, ei_end) = edges(g); ei != ei_end; ++ei)
         std::cout << "(" << index[source(*ei, g)]
                   << "," << index[target(*ei, g)] << ") ";
-    std::cout << std::endl;
+//    std::cout << std::endl;
 
 
     std::cout << "number of node markers: "<<node_marker.points.size()<<std::endl;

@@ -51,6 +51,8 @@ int main(int argc,char **argv){
 
 
     nh_private.getParam("max_interval_distance",asap_params.max_interval_distance);
+    nh_private.getParam("max_interval_distance_init",asap_params.max_interval_distance_init);
+
     nh_private.getParam("w_v0",asap_params.w_v0);
     nh_private.getParam("w_j",asap_params.w_j);
     nh_private.getParam("alpha",asap_params.alpha);
@@ -116,7 +118,7 @@ int main(int argc,char **argv){
 
                 auto t1 = std::chrono::high_resolution_clock::now();
                 auto dt = 1.e-9*std::chrono::duration_cast<std::chrono::nanoseconds>(t1-t0).count();
-                ROS_INFO_STREAM("replanning routine : "<<dt);
+//                ROS_INFO_STREAM("replanning routine : "<<dt);
 
             }
 
