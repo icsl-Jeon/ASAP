@@ -23,14 +23,14 @@ MatrixXd SEDT(MatrixXd binaryMatrix){
     bw_cast.convertTo(bw_cast,CV_8UC(1));
     transpose(bw_cast,bw_cast);
 
-	ROS_INFO("cols of bw_cast: %d",bw_cast.cols);
+//	ROS_INFO("cols of bw_cast: %d",bw_cast.cols);
 
     Mat concat_bw_cast;
 
     hconcat(bw_cast,bw_cast,concat_bw_cast);
     hconcat(bw_cast,concat_bw_cast,bw_cast);
 
-	ROS_INFO("cols of merged bw_cast: %d",bw_cast.cols);
+//	ROS_INFO("cols of merged bw_cast: %d",bw_cast.cols);
 
     // calculate SEDT
     cv::Mat dist,dist1,dist2;
@@ -253,7 +253,7 @@ GraphPath Dijkstra(Graph g,Vertex v0,Vertex vf){
 
     if (path.size())
     {
-        ROS_INFO("path exist");
+//        ROS_INFO("path exist");
     // Write shortest path
 //    std::cout << "Shortest path from v0 to v3:" << std::endl;
         float totalDistance = 0;

@@ -33,6 +33,7 @@ private:
     TargetPrediction target_prediction;
 
 
+
     /****
      * Planning
      */
@@ -89,6 +90,9 @@ public:
     bool state_callback_flag;
     bool octomap_callback_flag;
     bool model_regression_flag;
+
+    // target prediction error
+    double prediction_error;
 
     // ROS
     ros::NodeHandle nh; // getting parameters

@@ -56,7 +56,7 @@ int main(int argc,char **argv){
     nh_private.getParam("alpha",asap_params.alpha);
     nh_private.getParam("tracker_name",asap_params.tracker_name);
     nh_private.getParam("target_name",asap_params.target_name);
-
+    nh_private.getParam("replanning_trigger_error",asap_params.replanning_trigger_error);
 
     printf("Parameters summary: \n");
     printf("------------------------------\n");
@@ -100,16 +100,24 @@ int main(int argc,char **argv){
         if (asap_obj.octomap_callback_flag && asap_obj.state_callback_flag)
         {
 
-            asap_obj.target_regression(); // get regression model from history
-            asap_obj.target_future_prediction();
 
 
             // planning once this condition is satisfied
-            if(ros::Time::now().toSec()-planning_ckp.toSec()>solving_speed) {
+            if(asap_obj.prediction_error>=asap_params.replanning_trigger_error
+               or ((ros::Time::now()-planning_ckp).toSec()>asap_params.t_pred*0.7)) {
 
+                auto t0 = std::chrono::high_resolution_clock::now();
+
+                asap_obj.target_regression(); // get regression model from history
+                asap_obj.target_future_prediction();
                 asap_obj.reactive_planning();
                 planning_ckp=ros::Time::now();
                 asap_obj.smooth_path_update();
+
+                auto t1 = std::chrono::high_resolution_clock::now();
+                auto dt = 1.e-9*std::chrono::duration_cast<std::chrono::nanoseconds>(t1-t0).count();
+                ROS_INFO_STREAM("replanning routine : "<<dt);
+
             }
 
             asap_obj.quad_waypoint_pub();

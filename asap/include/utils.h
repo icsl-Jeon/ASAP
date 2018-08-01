@@ -105,6 +105,7 @@ namespace asap_ns {
         int t_pred; // prediction horizion [sec]
         string tracker_name; // tracker name
         string target_name; // target name
+        double replanning_trigger_error; // if accumlated error exceeds this value, replan
 
     };
 

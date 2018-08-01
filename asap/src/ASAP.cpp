@@ -15,6 +15,8 @@ ASAP::ASAP(asap_ns::Params params):nh("~"){
     target_history.resize(this->params.N_history);
     time_history.resize(this->params.N_history);
 
+    prediction_error=params.replanning_trigger_error+1; // so that planning is started at the first time
+
     // now
 	double duration=0.05; // 20Hz
 	check_duration=ros::Duration(duration);
@@ -574,8 +576,10 @@ void ASAP::target_regression() {
 //		std::cout<<"z: "<<std::endl;
 //		std::cout<<"beta0: "<<regress_model[2].beta0<<" beta1: "<<regress_model[2].beta1<<std::endl;
 
-		
-	
+		// reset the prediction error of target
+	    prediction_error=0;
+
+
 		model_regression_flag=true;
     }
     else
@@ -599,17 +603,48 @@ void ASAP::target_future_prediction() {
 		for(int insert_idx=0;insert_idx<pred_seq.size();insert_idx++)
 			planning_horizon.push_back(pred_seq.coeff(insert_idx));
 
-		
-		// why start from 1:  0 is not future value.
-        for (int idx = 1; idx < params.N_pred; idx++) {
-            t = pred_seq.coeff(idx);
-            geometry_msgs::PoseStamped poseStamped;
-            poseStamped.pose.position.x = model_eval(regress_model[0], t);
-            poseStamped.pose.position.y = model_eval(regress_model[1], t);
-            poseStamped.pose.position.z = model_eval(regress_model[2], t);
-            target_prediction.poses.push_back(poseStamped);
-        }
+        geometry_msgs::PoseStamped poseStamped;
+        poseStamped.pose.position=cur_target_pos;
+        geometry_msgs::PoseStamped next_poseStamped; // may not be used...
 
+
+        int idx=1;
+//        std::cout<<"future target feasibility check"<<std::endl;
+        // why start from 1:  0 is not future value.
+        for (; idx < params.N_pred; idx++) {
+
+            t = pred_seq.coeff(idx);
+            next_poseStamped.pose.position.x = model_eval(regress_model[0], t);
+            next_poseStamped.pose.position.y = model_eval(regress_model[1], t);
+            next_poseStamped.pose.position.z = model_eval(regress_model[2], t);
+
+//            std::cout<<"between "<<idx-1<<" and "<<idx<<" : ";
+
+            // inspect whether obstacles exist along the current pose and next pose
+            octomap::point3d light_start(float(poseStamped.pose.position.x),
+                                         float(poseStamped.pose.position.y),
+                                         float(poseStamped.pose.position.z));
+
+            octomap::point3d light_end(float(next_poseStamped.pose.position.x),
+                                       float(next_poseStamped.pose.position.y),
+                                       float(next_poseStamped.pose.position.z));
+
+            octomap::point3d light_dir=light_end-light_start;
+            double rayLength=light_dir.norm();
+//            std::cout<<"inspection length: "<<rayLength<<"/ result: ";
+            bool isHit=octree_obj->castRay(light_start,light_dir,light_end,true,rayLength);
+            if(not isHit) {
+                target_prediction.poses.push_back(next_poseStamped);
+                poseStamped = next_poseStamped;
+            } else
+                break;
+
+        } //end for
+
+
+        // repeatedly push back the remainder with the last pose before break
+        for(int i=idx;i<params.N_pred;i++)
+            target_prediction.poses.push_back(poseStamped);
     }
 }
 
@@ -672,7 +707,8 @@ void ASAP::smooth_path_update() {
 
 
 	// check if timevector is correctly stored
-	//std::cout<<ts.transpose()<<std::endl;
+	std::cout<<ros::Time::now()<<" in "<<ts.transpose()<<std::endl;
+
     // construct waypoints
 
     double w_j=params.w_j;
@@ -751,7 +787,7 @@ void ASAP::state_callback(const gazebo_msgs::ModelStates::ConstPtr& gazebo_msg) 
     //extract target state
     if (tracker_idx<model_names.size()) {
         cur_tracker_pos = pose_vector[tracker_idx].position;
-        cur_tracker_vel=twist_vector[tracker_idx];
+        cur_tracker_vel = twist_vector[tracker_idx];
         state_callback_flag = true;
     }
     else
@@ -761,21 +797,36 @@ void ASAP::state_callback(const gazebo_msgs::ModelStates::ConstPtr& gazebo_msg) 
     if (target_idx<model_names.size()) {
 
         cur_target_pos=pose_vector[target_idx].position;
+        cur_target_pos.z+=0.5; // let's
+
+        // accumulating prediction error
+        if(model_regression_flag) {
+            ros::Time now = ros::Time::now();
+            double target_pred_x = model_eval(regress_model[0], now.toSec());
+            double target_pred_y = model_eval(regress_model[1], now.toSec());
+            double target_pred_z = model_eval(regress_model[2], now.toSec());
+
+            prediction_error += pow(cur_target_pos.x - target_pred_x, 2) +
+                                pow(cur_target_pos.y - target_pred_y, 2) +
+                                pow(cur_target_pos.z - target_pred_z, 2);
+
+//            ROS_INFO("accum prediction error: %f",prediction_error);
+        }
 
 
-		// we insert every 20Hz for target 
-		
+        // we insert every 20Hz for target history
+
 		if (ros::Time::now()-check_pnt>check_duration)
 		{
-		// update check point 
+		// update check point
 		check_pnt=ros::Time::now();
-		// insertion	
+		// insertion
 		if(target_history.size()>=this->params.N_history) {
             target_history.pop_front();
             time_history.pop_front();
         }
         // time and target insertion
-        target_history.push_back(pose_vector[target_idx].position);
+        target_history.push_back(cur_target_pos);
         time_history.push_back(ros::Time::now().toSec());
     	}
 	}
