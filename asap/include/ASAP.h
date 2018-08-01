@@ -151,9 +151,9 @@ public:
      */
     void graph_init();  // node add wtih current position of tracker
     asap_ns::Layer get_layer(geometry_msgs::Point,int);
-    void add_layer(asap_ns::Layer); // add the layer and connect it with the last layer
+    void add_layer(asap_ns::Layer,double,double); // add the layer and connect it with the last layer
     void graph_wrapping(); // add the last layer
-    void solve_view_path(); // update view sequence of tracker by solving Dijkstra's shortest path algorithm
+    bool solve_view_path(); // update view sequence of tracker by solving Dijkstra's shortest path algorithm
 
     /*
      * Utils
@@ -167,7 +167,7 @@ public:
      */
     void target_regression(); // regression on history
     void target_future_prediction(); // update target future trajectory
-    void reactive_planning(); // graph construction + solve path altogether
+    bool reactive_planning(double,double); // graph construction + solve path altogether
     void smooth_path_update(); // spline curve saving
 
 

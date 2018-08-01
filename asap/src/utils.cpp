@@ -275,7 +275,7 @@ GraphPath Dijkstra(Graph g,Vertex v0,Vertex vf){
         return vertex_path1;
     }
     else{
-        ROS_WARN_ONCE("path does not exist");
+        ROS_WARN("path does not exist");
         return GraphPath();
     }
 }

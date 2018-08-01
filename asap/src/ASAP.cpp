@@ -357,7 +357,7 @@ Layer ASAP::get_layer(geometry_msgs::Point light_source,int t_idx){
  * layer2: t2 ...
  */
 
-void ASAP::add_layer(Layer layer) {
+void ASAP::add_layer(Layer layer,double d_max,double d_max0) {
 
 
     // no layer
@@ -413,7 +413,7 @@ void ASAP::add_layer(Layer layer) {
             Weight w;
             w=dist+params.w_v0*(layer.t_idx)/vis; // we assgin higher weight for later target position
 //            std::cout<<"weight: "<<w<<std::endl;
-            if (dist <params.max_interval_distance_init){
+            if (dist <d_max0){
                 boost::add_edge(descriptor_map["x0"], v, w, g);
                 edge_marker.points.clear();
                 edge_marker.points.push_back(graph_init_point);
@@ -460,7 +460,7 @@ void ASAP::add_layer(Layer layer) {
                 octomap::point3d P2(it2->position.x,it2->position.y,it2->position.z);
                 double dist=P1.distance(P2);
 //                printf("node distance: %.4f\n",dist);
-                if (dist<params.max_interval_distance){
+                if (dist<d_max){
                     Weight w;
                     w=P1.distance(P2)+params.w_v0*layer.t_idx/it2->visibility;
 
@@ -505,7 +505,7 @@ void ASAP::graph_wrapping() {
 
 
 
-void ASAP::solve_view_path() {
+bool ASAP::solve_view_path() {
     // find path using and save the Path into member functions
 
     auto t0 = std::chrono::high_resolution_clock::now();
@@ -522,7 +522,7 @@ void ASAP::solve_view_path() {
     this->view_path=nav_msgs::Path();
 	this->view_path.header.frame_id=world_frame_id;
 
-    if (graphPath.size())
+    if (graphPath.size()){
 //    std::cout<<"solved path received"<<std::endl;
     for(auto it = graphPath.begin(),end=graphPath.end();it != end;it++){
         VertexName id=*it;
@@ -533,7 +533,7 @@ void ASAP::solve_view_path() {
             geometry_msgs::PoseStamped poseStamped;
             poseStamped.pose.position=graph_init_point;
             view_path.poses.push_back(poseStamped);
-			std::cout<<std::endl;			
+//			std::cout<<std::endl;
         }else if(id =="xf"){
             // skip : no insertion
         }else{
@@ -551,7 +551,9 @@ void ASAP::solve_view_path() {
             view_path.poses.push_back(poseStamped);
         }
     }
-//    std::cout<<std::endl;
+        return true;
+    }else
+        return false;
 }
 
 
@@ -663,7 +665,7 @@ void ASAP::target_future_prediction() {
     }
 }
 
-void ASAP::reactive_planning() {
+bool ASAP::reactive_planning(double d_max,double d_max0) {
 
     planning_horizon_saved=planning_horizon;
 
@@ -681,7 +683,7 @@ void ASAP::reactive_planning() {
         Layer layer=get_layer(it->pose.position,t_idx);
 //        printf("------------------------------\n");
 //        ROS_INFO("found layer: %dth predicition",t_idx);
-        add_layer(layer);
+        add_layer(layer,d_max,d_max0);
     }
 
     graph_wrapping();
@@ -711,7 +713,7 @@ void ASAP::reactive_planning() {
 //    std::cout << "number of node markers: "<<node_marker.points.size()<<std::endl;
 
 
-    solve_view_path();
+    return solve_view_path();
 }
 
 
@@ -888,7 +890,7 @@ bool ASAP::solve_callback(asap::SolvePath::Request& req,asap::SolvePath::Respons
         Layer layer=get_layer(it->pose.position,t_idx);
         printf("------------------------------\n");
         ROS_INFO("found layer: %dth predicition",t_idx);
-        add_layer(layer);
+        add_layer(layer,params.max_interval_distance,params.max_interval_distance_init);
     }
 
     graph_wrapping();

@@ -108,12 +108,29 @@ int main(int argc,char **argv){
             if(asap_obj.prediction_error>=asap_params.replanning_trigger_error
                or ((ros::Time::now()-planning_ckp).toSec()>asap_params.t_pred*0.7)) {
 
+
+                // planning loop
+
                 auto t0 = std::chrono::high_resolution_clock::now();
+
+
 
                 asap_obj.target_regression(); // get regression model from history
                 asap_obj.target_future_prediction();
-                asap_obj.reactive_planning();
-                planning_ckp=ros::Time::now();
+
+                bool isSolved=false;
+                double d_max=asap_params.max_interval_distance;
+                double d_max0=asap_params.max_interval_distance_init;
+
+                while(not isSolved) {
+                    isSolved = asap_obj.reactive_planning(d_max,d_max0);
+                    if (not isSolved){
+                        ROS_WARN("try again with extension of d_max");
+                        d_max+=0.2; d_max0+=0.2;
+                    }
+                }
+
+                planning_ckp = ros::Time::now();
                 asap_obj.smooth_path_update();
 
                 auto t1 = std::chrono::high_resolution_clock::now();
