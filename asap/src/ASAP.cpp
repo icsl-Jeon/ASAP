@@ -228,6 +228,41 @@ void ASAP::graph_init() {
 	edge_id=0;
 }
 
+void ASAP::record(nav_msgs::Path& target_path_ptr, nav_msgs::Path& tracker_path_ptr, visualization_msgs::MarkerArray& bearing_vector_ptr) {
+
+    geometry_msgs::PoseStamped target_pose;
+    geometry_msgs::PoseStamped tracker_pose;
+
+    target_pose.pose.position=cur_target_pos;
+    tracker_pose.pose.position=cur_tracker_pos;
+
+    target_path_ptr.poses.push_back(target_pose);
+    tracker_path_ptr.poses.push_back(tracker_pose);
+
+    // edge marker init
+    visualization_msgs::Marker arrow;
+    arrow.header.frame_id=world_frame_id;
+    arrow.ns = "record_arrow";
+    arrow.action = visualization_msgs::Marker::ADD;
+    arrow.pose.orientation.w = 1.0;
+    arrow.id = bearing_vector_ptr.markers.size();
+    arrow.type = visualization_msgs::Marker::ARROW;
+    arrow.scale.x = 0.01;
+    arrow.scale.y = 0.01;
+    arrow.scale.z = 0.02;
+    arrow.color.b = 0.0;
+    arrow.color.g = 0.1;
+    arrow.color.r = 0.2;
+    arrow.color.a = 0.5;
+
+    arrow.points.push_back(cur_tracker_pos);
+    arrow.points.push_back(cur_target_pos);
+
+    bearing_vector_ptr.markers.push_back(arrow);
+
+
+}
+
 // I think it can be optimized more
 MatrixXd ASAP::castRay(geometry_msgs::Point rayStartPnt, float ray_length,bool verbose ) {
 

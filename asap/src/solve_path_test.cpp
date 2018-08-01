@@ -20,6 +20,11 @@ int main(int argc,char **argv){
     ros::init(argc,argv,"solving_path_test_node");
     // parameter parsing
     ros::NodeHandle nh_private("~");
+
+
+
+
+
     asap_ns::Params asap_params;
 
     asap_params.azim_min=0; asap_params.azim_max=2*PI;
@@ -60,6 +65,7 @@ int main(int argc,char **argv){
     nh_private.getParam("target_name",asap_params.target_name);
     nh_private.getParam("replanning_trigger_error",asap_params.replanning_trigger_error);
 
+
     printf("Parameters summary: \n");
     printf("------------------------------\n");
     printf("------------------------------\n");
@@ -80,6 +86,17 @@ int main(int argc,char **argv){
 
     ASAP asap_obj(asap_params);
 
+    // for record
+    nav_msgs::Path target_traj_record; target_traj_record.header.frame_id=asap_obj.world_frame_id;
+    nav_msgs::Path tracker_traj_record; tracker_traj_record.header.frame_id=asap_obj.world_frame_id;
+    visualization_msgs::MarkerArray bearing_vector_list;
+
+    ros::Publisher target_traj_record_pub=nh_private.advertise<nav_msgs::Path>("record_target",2);
+    ros::Publisher tracker_traj_record_pub=nh_private.advertise<nav_msgs::Path>("record_tracker",2);
+    ros::Publisher bearing_vector_list_pub=nh_private.advertise<visualization_msgs::MarkerArray>("record_bearing_vector",2);
+    double record_rate=0.4; //sec
+
+
     ROS_INFO("Always See and Picturing started");
     ros::Rate rate(30);
 
@@ -88,6 +105,7 @@ int main(int argc,char **argv){
 
     // planning check point
     ros::Time planning_ckp=ros::Time::now();
+    ros::Time record_ckp=ros::Time::now();
 
 
     asap_obj.hovering(ros::Duration(1.0),double(1));
@@ -144,6 +162,21 @@ int main(int argc,char **argv){
             asap_obj.marker_publish();
             asap_obj.points_publish();
         }
+
+
+        // record
+
+        if((ros::Time::now()-record_ckp).toSec()>record_rate){
+
+            record_ckp=ros::Time::now();
+            asap_obj.record(target_traj_record,tracker_traj_record,bearing_vector_list);
+
+        }
+
+        target_traj_record_pub.publish(target_traj_record);
+        tracker_traj_record_pub.publish(tracker_traj_record);
+        bearing_vector_list_pub.publish(bearing_vector_list);
+
 
         ros::spinOnce();
         rate.sleep();

@@ -74,6 +74,9 @@ public:
     ASAP(asap_ns::Params);
     ~ASAP();
 
+    // recording
+    void record(nav_msgs::Path&,nav_msgs::Path&,visualization_msgs::MarkerArray &);
+
 
     /***********************
      * Member variables
