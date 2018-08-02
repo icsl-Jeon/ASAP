@@ -144,6 +144,8 @@ int main(int argc,char **argv){
                     isSolved = asap_obj.reactive_planning(d_max,d_max0);
                     if (not isSolved){
                         ROS_WARN("try again with extension of d_max");
+                        asap_obj.target_regression(); // get regression model from history
+                        asap_obj.target_future_prediction();
                         d_max+=0.2; d_max0+=0.2;
                     }
                 }

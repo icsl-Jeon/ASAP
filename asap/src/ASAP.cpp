@@ -247,9 +247,9 @@ void ASAP::record(nav_msgs::Path& target_path_ptr, nav_msgs::Path& tracker_path_
     arrow.pose.orientation.w = 1.0;
     arrow.id = bearing_vector_ptr.markers.size();
     arrow.type = visualization_msgs::Marker::ARROW;
-    arrow.scale.x = 0.01;
-    arrow.scale.y = 0.01;
-    arrow.scale.z = 0.02;
+    arrow.scale.x = 0.07;
+    arrow.scale.y = 0.11;
+    arrow.scale.z = 0.1;
     arrow.color.b = 0.0;
     arrow.color.g = 0.1;
     arrow.color.r = 0.2;
