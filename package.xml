@@ -1,6 +1,6 @@
 <?xml version="1.0"?>
 <package format="2">
-  <name>asap</name>
+  <name>vcvs_sim</name>
   <version>0.0.0</version>
   <description>The asap package</description>
 

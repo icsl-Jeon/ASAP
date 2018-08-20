@@ -17,6 +17,8 @@ private:
     asap_ns::Params params;
     // linspace for azimuth(col) , elevation(row) set
     Eigen::VectorXf azim_set, elev_set;
+    // ray casting deviding resolution : step = res / N_cast
+    int N_cast;
 
     /****
      * Target
@@ -163,7 +165,7 @@ public:
      */
     MatrixXd castRay(geometry_msgs::Point,float,bool=false); // cast ray in octomap
     void hovering(ros::Duration,double); // execute hovering for quadrotor
-
+    bool collision_check(octomap::point3d,octomap::point3d,bool); // colision check
 
     /*
      * Alogrithm
@@ -182,9 +184,7 @@ public:
     void quad_waypoint_pub(); // waypoint publish for quad
 
     // callback (subsrcibe)
-    void points_callback(kiro_gui_msgs::PositionArray); // this callback function is for getting point from rviz
     void state_callback(const gazebo_msgs::ModelStates::ConstPtr&);
-    bool solve_callback(asap::SolvePath::Request&,asap::SolvePath::Response&); // service callback
     void octomap_callback(const octomap_msgs::Octomap&);
 };
 

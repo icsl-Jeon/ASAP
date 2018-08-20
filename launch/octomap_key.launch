@@ -31,6 +31,6 @@
 	<!--getting search postions from Rviz-->
 	<!--node name="search_position_gui" pkg="rqt_search_position" type="search_position.py"/-->
 	<!--rviz-->
-	<node name="rviz" pkg="rviz" type="rviz" args="-d $(find asap)/rviz/path_solver.rviz"/>
+	<node name="rviz" pkg="rviz" type="rviz" args="-d $(find vcvs_sim)/rviz/path_solver.rviz"/>
 
 </launch>

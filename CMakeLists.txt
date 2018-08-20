@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 2.8.3)
-project(asap)
+project(vcvs_sim)
 
 ## Compile as C++11, supported in ROS Kinetic and newer
 add_compile_options(-std=c++11)
@@ -57,14 +57,15 @@ link_libraries(${OCTOMAP_LIBRARIES})
 find_package(OpenCV REQUIRED)
 include_directories(${OpenCV_INCLUDE_DIRS})
 link_libraries(${OpenCV_LIBRARIES})
-
+# mavros
+set(mav_msgs_DIR /home/jbs/mavros_ws/devel/share/mav_msgs/cmake)
 
 #-------------------#
 # ASAP dependencies #
 #-------------------#
 
 
-find_package(catkin REQUIRED COMPONENTS gazebo_msgs geometry_msgs octomap_ros mav_msgs roscpp sensor_msgs octomap_msgs message_generation kiro_gui_msgs trajectory_msgs)
+find_package(catkin REQUIRED COMPONENTS gazebo_msgs geometry_msgs octomap_ros mav_msgs roscpp sensor_msgs octomap_msgs message_generation trajectory_msgs)
 
 add_service_files(
     FILES
@@ -76,7 +77,6 @@ generate_messages(
    DEPENDENCIES
    std_msgs  # Or other packages containing msgs
    geometry_msgs
-   kiro_gui_msgs
 )
 
 

@@ -26,6 +26,8 @@ ASAP::ASAP(asap_ns::Params params):nh("~"){
 
 
     nh.getParam("world_frame_id",world_frame_id);
+    nh.getParam("N_cast",N_cast);
+
 
     std::cout<<"world frame id:"<<world_frame_id<<std::endl;
     target_prediction.header.frame_id=world_frame_id;
@@ -42,7 +44,6 @@ ASAP::ASAP(asap_ns::Params params):nh("~"){
     // subscribe
     octomap_sub=nh.subscribe("/octomap_full",3,&ASAP::octomap_callback,this);
     states_sub=nh.subscribe("/gazebo/model_states",10,&ASAP::state_callback,this);
-    points_sub=nh.subscribe("/search_position_array",10,&ASAP::points_callback,this);
 
     // advertise
     path_pub=nh.advertise<nav_msgs::Path>("view_sequence",3);
@@ -69,7 +70,6 @@ ASAP::ASAP(asap_ns::Params params):nh("~"){
    
 
     // service
-    solve_server = nh.advertiseService("solve_path",&ASAP::solve_callback,this);
 
     // candid nodes marker init
     marker.header.frame_id = world_frame_id;
@@ -199,6 +199,75 @@ void ASAP::hovering(ros::Duration dur,double hovering_z){
 	
 }
 
+
+bool ASAP::collision_check(octomap::point3d P1, octomap::point3d P2,bool ignoreUnknownCells) {
+    // inspect whether obstacles exist along the current pose and next pose
+    /**
+    octomap::point3d P_end;
+    octomap::point3d light_dir=P2-P1;
+    double rayLength=light_dir.norm();
+
+
+
+//            std::cout<<"inspection length: "<<rayLength<<"/ result: ";
+    if (rayLength==0){
+        return false; // if the current position of target is found to be free, then no collision
+    }
+
+    if (octree_obj->castRay(P1,light_dir,P_end,true,rayLength)){
+        if ((P_end-P1).norm() < rayLength)
+            return true;
+        else
+            return false;
+    } else
+    {
+        ROS_WARN("collision checking btw 2 pnts aborted because unknown region was hit");
+        return true;
+    }
+    **/
+    octomap::point3d cur_end_pnt = P1;
+    float ray_length = (P2 - P1).norm();
+    float step = octree_obj ->getResolution() / N_cast;
+
+    octomap::OcTreeNode* node = NULL;
+
+    // if P1 == P2
+    if (ray_length == 0) {
+        node = octree_obj->search(cur_end_pnt.x(), cur_end_pnt.y(), cur_end_pnt.z());
+        if (octree_obj->isNodeOccupied(node))
+            return true; //hit  at the starting position
+        else
+            return false;
+    }
+
+    octomap::point3d dir = (P2 - P1) ;
+    dir /= ray_length ; // normalized direction
+    octomap::point3d delta = dir;
+    delta *= step; // increasing amount of the vector
+
+    node = octree_obj->search(cur_end_pnt.x(),cur_end_pnt.y(),cur_end_pnt.z());
+    if (octree_obj->isNodeOccupied(node))
+        return true; //hit  at the starting position
+
+    // else(not hit), keep go on
+    while ((cur_end_pnt - P1).norm() < ray_length )
+        cur_end_pnt += delta;
+        node = octree_obj->search(cur_end_pnt.x(),cur_end_pnt.y(),cur_end_pnt.z());
+        if (node){ // known cell
+            if (octree_obj->isNodeOccupied(node)) // if hit
+                return true; // known, hit
+            // else, continue while loop
+        }else{
+            // it is unknown cell
+            if (!ignoreUnknownCells) // treat the cell as obstacle (conservative)
+                return true;
+                // else, continue while loop
+        }
+
+    return false; // P1 == P2 and not hit at P1 or were not hit
+
+}
+
 void ASAP::graph_init() {
     // graph init
     g=Graph();
@@ -263,7 +332,6 @@ void ASAP::record(nav_msgs::Path& target_path_ptr, nav_msgs::Path& tracker_path_
 
 }
 
-// I think it can be optimized more
 MatrixXd ASAP::castRay(geometry_msgs::Point rayStartPnt, float ray_length,bool verbose ) {
 
 
@@ -276,7 +344,7 @@ MatrixXd ASAP::castRay(geometry_msgs::Point rayStartPnt, float ray_length,bool v
     if (octree_obj->size()) {
 //        printf("casting started with light distance %.4f\n",ray_length);
 
-        bool ignoreUnknownCells =true;
+        bool ignoreUnknownCells = false;
         octomap::point3d light_start(float(rayStartPnt.x),float(rayStartPnt.y),float(rayStartPnt.z));
 
         // generate mesh
@@ -289,6 +357,16 @@ MatrixXd ASAP::castRay(geometry_msgs::Point rayStartPnt, float ray_length,bool v
                                   float(cos(elev_set[ind_elev]) * sin(azim_set[ind_azim])),
                                   float(sin(elev_set[ind_elev])));
 
+                light_end = light_start + light_dir * ray_length;
+
+                bool isHit = this->collision_check(light_start, light_end, ignoreUnknownCells);
+
+                if (isHit)
+                    castResultBinary.coeffRef(ind_elev, ind_azim) = 1 ;
+                else
+                    castResultBinary.coeffRef(ind_elev, ind_azim) = 0 ;
+
+                /**
                 // if hit
                 if(octree_obj->castRay(light_start, light_dir, light_end,
                                        ignoreUnknownCells, ray_length))
@@ -296,6 +374,7 @@ MatrixXd ASAP::castRay(geometry_msgs::Point rayStartPnt, float ray_length,bool v
                 else
                     // no hit = just tracking distance
                     castResultBinary.coeffRef(ind_elev,ind_azim)=0;
+                **/
             }
 
         // print the cast result
@@ -308,6 +387,8 @@ MatrixXd ASAP::castRay(geometry_msgs::Point rayStartPnt, float ray_length,bool v
 
     return castResultBinary;
 }
+
+
 
 
 Layer ASAP::get_layer(geometry_msgs::Point light_source,int t_idx){
@@ -328,11 +409,11 @@ Layer ASAP::get_layer(geometry_msgs::Point light_source,int t_idx){
         // if we SEDT on zero matrix, it will be disaster
         if(binaryCast.isZero(0)) {
             isFree=true;
-//            std::cout << "===============================" << std::endl;
-//            std::cout << binaryCast << std::endl;
-//            std::cout << "-------------------------------" << std::endl;
-//            std::cout << "Equal distribution" <<std::endl;
-//            std::cout << "===============================" << std::endl;
+            std::cout << "===============================" << std::endl;
+            std::cout << binaryCast << std::endl;
+            std::cout << "-------------------------------" << std::endl;
+            std::cout << "Equal distribution" <<std::endl;
+            std::cout << "===============================" << std::endl;
             extrema = equal_dist_idx_set(binaryCast.rows(), binaryCast.cols(),2,8);
 //            ROS_INFO("found extrema: %d", extrema.size());
 
@@ -341,11 +422,11 @@ Layer ASAP::get_layer(geometry_msgs::Point light_source,int t_idx){
 
             sdf = SEDT(binaryCast); // signed distance field
             isFree=false;
-//            std::cout << "===============================" << std::endl;
-//            std::cout << binaryCast << std::endl;
-//            std::cout << "-------------------------------" << std::endl;
-//            std::cout << sdf << std::endl;
-//            std::cout << "===============================" << std::endl;
+            std::cout << "===============================" << std::endl;
+            std::cout << binaryCast << std::endl;
+            std::cout << "-------------------------------" << std::endl;
+            std::cout << sdf << std::endl;
+            std::cout << "===============================" << std::endl;
             // normalization should be performed
             mat_normalize(sdf); // sdf normalized
             extrema = localMaxima(sdf, params.N_extrem, params.local_range);
@@ -448,7 +529,9 @@ void ASAP::add_layer(Layer layer,double d_max,double d_max0) {
             Weight w;
             w=dist+params.w_v0*(layer.t_idx)/vis; // we assgin higher weight for later target position
 //            std::cout<<"weight: "<<w<<std::endl;
-            if (dist <d_max0){
+            if (dist <d_max0 ){
+
+
                 boost::add_edge(descriptor_map["x0"], v, w, g);
                 edge_marker.points.clear();
                 edge_marker.points.push_back(graph_init_point);
@@ -495,7 +578,7 @@ void ASAP::add_layer(Layer layer,double d_max,double d_max0) {
                 octomap::point3d P2(it2->position.x,it2->position.y,it2->position.z);
                 double dist=P1.distance(P2);
 //                printf("node distance: %.4f\n",dist);
-                if (dist<d_max){
+                if (dist<d_max ){
                     Weight w;
                     w=P1.distance(P2)+params.w_v0*layer.t_idx/it2->visibility;
 
@@ -604,13 +687,13 @@ void ASAP::target_regression() {
         }
 
 		
-
-		std::cout<<"regression started: ----------------"<<std::endl;
-
-		std::cout<<"ts: "<<ts<<std::endl;
-		std::cout<<"is ts same???"<<std::endl;
-		std::cout<<(ts.coeff(0)==ts.coeff(5))<<std::endl;
 //
+//		std::cout<<"regression started: ----------------"<<std::endl;
+//
+//		std::cout<<"ts: "<<ts<<std::endl;
+//		std::cout<<"is ts same???"<<std::endl;
+//		std::cout<<(ts.coeff(0)==ts.coeff(5))<<std::endl;
+////
 //		std::cout<<"xs: "<<xs<<std::endl;
 //		std::cout<<"ys: "<<ys<<std::endl;
 //		std::cout<<"zs: "<<zs<<std::endl;
@@ -681,11 +764,8 @@ void ASAP::target_future_prediction() {
                                        float(next_poseStamped.pose.position.y),
                                        float(next_poseStamped.pose.position.z));
 
-            octomap::point3d light_dir=light_end-light_start;
-            double rayLength=light_dir.norm();
-//            std::cout<<"inspection length: "<<rayLength<<"/ result: ";
-            bool isHit=octree_obj->castRay(light_start,light_dir,light_end,true,rayLength);
-            if(not isHit) {
+
+            if(not collision_check(light_start,light_end,true)) {
                 target_prediction.poses.push_back(next_poseStamped);
                 poseStamped = next_poseStamped;
             } else
@@ -897,69 +977,6 @@ void ASAP::state_callback(const gazebo_msgs::ModelStates::ConstPtr& gazebo_msg) 
 //    else
 //        ROS_WARN("specified tracker name was not found in gazebo");
 
-}
-void ASAP::points_callback(kiro_gui_msgs::PositionArray positionArray) {
-
-    // receive the target history
-    int N=0;
-    target_prediction.poses.clear();
-    for (auto it = positionArray.positions.begin(),end=positionArray.positions.end();it != end;it++)
-    {
-        it->pose.position.z=0.5;
-        target_prediction.poses.push_back(*it); N++;}
-
-    ROS_INFO("%d points received",N);
-
-}
-
-
-bool ASAP::solve_callback(asap::SolvePath::Request& req,asap::SolvePath::Response& rep) {
-
-    // Building graph
-
-    graph_init();
-    int t_idx=1;
-    ROS_INFO("size of prediction pnts: %d",target_prediction.poses.size());
-    for (auto it = target_prediction.poses.begin(),end=target_prediction.poses.end();it != end;it++,t_idx++)
-    {
-
-        Layer layer=get_layer(it->pose.position,t_idx);
-        printf("------------------------------\n");
-        ROS_INFO("found layer: %dth predicition",t_idx);
-        add_layer(layer,params.max_interval_distance,params.max_interval_distance_init);
-    }
-
-    graph_wrapping();
-    ROS_INFO("finished graph");
-
-
-    // graph inspection
-
-    IndexMap index = get(boost::vertex_index, g);
-    std::cout << "vertices(g) = ";
-    typedef boost::graph_traits<Graph>::vertex_iterator vertex_iter;
-    std::pair<vertex_iter, vertex_iter> vp;
-    for (vp = vertices(g); vp.first != vp.second; ++vp.first) {
-        Vertex v = *vp.first;
-        std::cout << index[v] <<  " ";
-    }
-//    std::cout << std::endl;
-
-    std::cout << "edges(g) = ";
-    boost::graph_traits<Graph>::edge_iterator ei, ei_end;
-    for (boost::tie(ei, ei_end) = edges(g); ei != ei_end; ++ei)
-        std::cout << "(" << index[source(*ei, g)]
-                  << "," << index[target(*ei, g)] << ") ";
-//    std::cout << std::endl;
-
-
-    std::cout << "number of node markers: "<<node_marker.points.size()<<std::endl;
-
-
-    solve_view_path();
-    ROS_INFO("Dijkstra solved");
-
-    return true;
 }
 
 void ASAP::octomap_callback(const octomap_msgs::Octomap & msg) {
